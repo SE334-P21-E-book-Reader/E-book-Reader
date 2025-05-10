@@ -69,3 +69,4 @@ ios/Runner/GeneratedPluginRegistrant.*
 
 # macOS
 **/macos/Flutter/GeneratedPluginRegistrant.swift
+firebase.json
