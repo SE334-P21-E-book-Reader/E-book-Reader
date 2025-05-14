@@ -44,8 +44,8 @@
     "@home": {"description": "Nhãn điều hướng Trang chủ."},
     "library": "Thư viện",
     "@library": {"description": "Nhãn điều hướng Thư viện."},
-    "bookmark": "Đánh dấu",
-    "@bookmark": {"description": "Nhãn điều hướng Đánh dấu."},
+    "bookmark": "Dấu trang",
+    "@bookmark": {"description": "Nhãn điều hướng Dấu trang."},
     "addBook": "Thêm sách",
     "@addBook": {"description": "Nút thêm sách mới ở màn hình thư viện."},
     "searchBooks": "Tìm kiếm sách...",
@@ -66,8 +66,28 @@
     "@pageIndicator": {
         "description": "Chỉ báo số trang trong trình đọc, ví dụ: Trang 3 / 10",
         "placeholders": {
-            "current": { "type": "String" },
-            "total": { "type": "String" }
+            "current": { "type": "Object" },
+            "total": { "type": "Object" }
         }
-    }
+    },
+    "bookmarksTitle": "Dấu trang",
+    "@bookmarksTitle": {"description": "Tiêu đề cho màn hình Dấu trang."},
+    "bookmarksSearchHint": "Tìm kiếm dấu trang...",
+    "@bookmarksSearchHint": {"description": "Placeholder cho thanh tìm kiếm ở màn hình Dấu trang."},
+    "bookmarksSortByTime": "Theo thời gian",
+    "@bookmarksSortByTime": {"description": "Sắp xếp dấu trang theo thời gian."},
+    "bookmarksSortByBook": "Theo sách",
+    "@bookmarksSortByBook": {"description": "Sắp xếp dấu trang theo sách."},
+    "bookmarksNotFound": "Không tìm thấy dấu trang nào phù hợp",
+    "@bookmarksNotFound": {"description": "Thông báo khi không có dấu trang nào khớp với tìm kiếm."},
+    "bookmarksEmpty": "Bạn chưa có dấu trang nào",
+    "@bookmarksEmpty": {"description": "Thông báo khi chưa có dấu trang nào."},
+    "bookmarksPage": "Trang {page}",
+    "@bookmarksPage": {"description": "Nhãn số trang trong mục dấu trang.", "placeholders": {"page": { "type": "Object" }}},
+    "bookmarksCount": "({count})",
+    "@bookmarksCount": {"description": "Số lượng dấu trang cho một cuốn sách.", "placeholders": {"count": { "type": "Object" }}},
+    "bookmarksDeleteTitle": "Xóa dấu trang",
+    "@bookmarksDeleteTitle": {"description": "Tiêu đề xác nhận xóa dấu trang."},
+    "bookmarksDeleteConfirm": "Bạn có chắc chắn muốn xóa dấu trang này? Hành động này không thể hoàn tác.",
+    "@bookmarksDeleteConfirm": {"description": "Thông báo xác nhận xóa dấu trang."}
 } 

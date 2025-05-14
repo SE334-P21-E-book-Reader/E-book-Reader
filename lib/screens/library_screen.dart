@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_gen/gen_l10n/app_localizations.dart';
-import '../widgets/book_grid.dart';
-import '../widgets/book_list.dart';
+import '../widgets/library/book_grid.dart';
+import '../widgets/library/book_list.dart';
 import '../database/mock_database.dart';
 import 'package:file_picker/file_picker.dart';
 import '../screens/book_reader_screen.dart';
+import '../widgets/components/search_bar.dart' as components;
+import '../widgets/components/icon_switch.dart';
 
 class LibraryScreen extends StatefulWidget {
   const LibraryScreen({super.key});
@@ -56,8 +58,10 @@ class _LibraryScreenState extends State<LibraryScreen>
                   children: [
                     Text(
                       l10n.library,
-                      style: theme.textTheme.titleLarge
-                          ?.copyWith(fontWeight: FontWeight.bold),
+                      style: theme.textTheme.titleLarge?.copyWith(
+                        color: theme.colorScheme.onSurface,
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
                     IconButton(
                       icon: const Icon(Icons.add),
@@ -94,51 +98,36 @@ class _LibraryScreenState extends State<LibraryScreen>
                 Row(
                   children: [
                     Expanded(
-                      child: TextField(
-                        decoration: InputDecoration(
-                          prefixIcon: const Icon(Icons.search),
-                          hintText: l10n.searchBooks,
-                          contentPadding: const EdgeInsets.symmetric(
-                              vertical: 0, horizontal: 16),
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(24),
-                            borderSide: BorderSide(color: theme.dividerColor),
-                          ),
-                          filled: true,
-                          fillColor: theme.inputDecorationTheme.fillColor ??
-                              theme.colorScheme.surface,
-                        ),
+                      child: components.SearchBar(
+                        hintText: l10n.searchBooks,
                         onChanged: (value) =>
                             setState(() => _searchQuery = value),
+                        borderColor: theme.dividerColor,
+                        fillColor: theme.inputDecorationTheme.fillColor ??
+                            theme.colorScheme.surface,
                       ),
                     ),
                     const SizedBox(width: 8),
                     SizedBox(
                       height: 40,
-                      child: Container(
-                        decoration: BoxDecoration(
-                          border: Border.all(color: theme.dividerColor),
-                          borderRadius: BorderRadius.circular(24),
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            _ViewModeButton(
-                              icon: Icons.grid_view,
-                              selected: _viewMode == 'grid',
-                              onTap: () => setState(() => _viewMode = 'grid'),
-                              tooltip: l10n.gridView,
-                              theme: theme,
-                            ),
-                            _ViewModeButton(
-                              icon: Icons.list,
-                              selected: _viewMode == 'list',
-                              onTap: () => setState(() => _viewMode = 'list'),
-                              tooltip: l10n.listView,
-                              theme: theme,
-                            ),
-                          ],
-                        ),
+                      child: IconSwitch(
+                        items: [
+                          IconSwitchItem(
+                            icon: Icons.grid_view,
+                            tooltip: l10n.gridView,
+                            selected: _viewMode == 'grid',
+                            onTap: () => setState(() => _viewMode = 'grid'),
+                            theme: theme,
+                          ),
+                          IconSwitchItem(
+                            icon: Icons.list,
+                            tooltip: l10n.listView,
+                            selected: _viewMode == 'list',
+                            onTap: () => setState(() => _viewMode = 'list'),
+                            theme: theme,
+                          ),
+                        ],
+                        borderColor: theme.dividerColor,
                       ),
                     ),
                   ],
@@ -256,46 +245,6 @@ class _LibraryScreenState extends State<LibraryScreen>
             ),
           ),
         ],
-      ),
-    );
-  }
-}
-
-class _ViewModeButton extends StatelessWidget {
-  final IconData icon;
-  final bool selected;
-  final VoidCallback onTap;
-  final String tooltip;
-  final ThemeData theme;
-
-  const _ViewModeButton({
-    required this.icon,
-    required this.selected,
-    required this.onTap,
-    required this.tooltip,
-    required this.theme,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Material(
-      color: selected
-          ? (theme.brightness == Brightness.dark
-              ? theme.colorScheme.primary.withValues(alpha: 0.25)
-              : theme.colorScheme.primary.withValues(alpha: 0.12))
-          : Colors.transparent,
-      borderRadius: BorderRadius.circular(24),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(24),
-        onTap: onTap,
-        child: Padding(
-          padding: const EdgeInsets.all(6.0),
-          child: Icon(
-            icon,
-            color: selected ? theme.colorScheme.primary : theme.iconTheme.color,
-            size: 20,
-          ),
-        ),
       ),
     );
   }

@@ -69,5 +69,25 @@
             "current": {},
             "total": {}
         }
-    }
+    },
+    "bookmarksTitle": "Bookmarks",
+    "@bookmarksTitle": {"description": "Title for the bookmarks screen."},
+    "bookmarksSearchHint": "Search bookmarks...",
+    "@bookmarksSearchHint": {"description": "Placeholder for the search bar in the bookmarks screen."},
+    "bookmarksSortByTime": "By time",
+    "@bookmarksSortByTime": {"description": "Sort bookmarks by time."},
+    "bookmarksSortByBook": "By book",
+    "@bookmarksSortByBook": {"description": "Sort bookmarks by book."},
+    "bookmarksNotFound": "No matching bookmarks found",
+    "@bookmarksNotFound": {"description": "Message when no bookmarks match the search."},
+    "bookmarksEmpty": "You have no bookmarks yet",
+    "@bookmarksEmpty": {"description": "Message when there are no bookmarks at all."},
+    "bookmarksPage": "Page {page}",
+    "@bookmarksPage": {"description": "Label for page number in bookmark item.", "placeholders": {"page": {}}},
+    "bookmarksCount": "({count})",
+    "@bookmarksCount": {"description": "Number of bookmarks for a book.", "placeholders": {"count": {}}},
+    "bookmarksDeleteTitle": "Delete bookmark",
+    "@bookmarksDeleteTitle": {"description": "Title for the delete bookmark confirmation dialog."},
+    "bookmarksDeleteConfirm": "Are you sure you want to delete this bookmark? This action cannot be undone.",
+    "@bookmarksDeleteConfirm": {"description": "Confirmation message for deleting a bookmark."}
 } 

@@ -9,6 +9,7 @@ import 'cubit/theme/theme_cubit.dart';
 import 'cubit/language/language_cubit.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'screens/library_screen.dart';
+import 'screens/bookmarks_screen.dart';
 
 void main() async {
   // Đảm bảo Flutter được khởi tạo
@@ -52,13 +53,18 @@ class MyApp extends StatelessWidget {
                   onSurface: Colors.black,
                 ),
                 useMaterial3: true,
-                textTheme: GoogleFonts.croissantOneTextTheme(
-                  Typography.englishLike2021.apply(
-                    fontSizeFactor: context.read<ThemeCubit>().fontSizeScale,
-                    bodyColor: Colors.black,
-                    displayColor: Colors.black,
-                  ),
-                ),
+                textTheme: GoogleFonts.lobsterTextTheme(
+                  Typography.englishLike2021,
+                )
+                    .apply(
+                      displayColor: Colors.black,
+                      bodyColor: Colors.black,
+                    )
+                    .copyWith(
+                      bodySmall: GoogleFonts.lobster(fontSize: 14),
+                      bodyMedium: GoogleFonts.lobster(fontSize: 16),
+                      bodyLarge: GoogleFonts.lobster(fontSize: 18),
+                    ),
               ),
               darkTheme: ThemeData(
                 colorScheme: const ColorScheme(
@@ -73,13 +79,18 @@ class MyApp extends StatelessWidget {
                   onSurface: Colors.white,
                 ),
                 useMaterial3: true,
-                textTheme: GoogleFonts.croissantOneTextTheme(
-                  Typography.englishLike2021.apply(
-                    fontSizeFactor: context.read<ThemeCubit>().fontSizeScale,
-                    bodyColor: Colors.white,
-                    displayColor: Colors.white,
-                  ),
-                ),
+                textTheme: GoogleFonts.lobsterTextTheme(
+                  Typography.englishLike2021,
+                )
+                    .apply(
+                      displayColor: Colors.white,
+                      bodyColor: Colors.white,
+                    )
+                    .copyWith(
+                      bodySmall: GoogleFonts.lobster(fontSize: 14),
+                      bodyMedium: GoogleFonts.lobster(fontSize: 16),
+                      bodyLarge: GoogleFonts.lobster(fontSize: 18),
+                    ),
               ),
               themeMode: themeState.themeMode,
               locale: languageState.locale,
@@ -114,7 +125,7 @@ class _MainScreenState extends State<MainScreen> {
 
   final List<Widget> _screens = [
     const LibraryScreen(),
-    const LibraryScreen(),
+    const BookmarksScreen(),
     const SettingsScreen(),
   ];
 
@@ -138,7 +149,7 @@ class _MainScreenState extends State<MainScreen> {
       case 0:
         return 'home';
       case 1:
-        return 'library';
+        return 'bookmarks';
       case 2:
         return 'settings';
       default:

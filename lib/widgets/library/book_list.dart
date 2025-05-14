@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_gen/gen_l10n/app_localizations.dart';
-import '../widgets/book_grid.dart';
+import 'book_grid.dart';
 
 const String kPlaceholderImage = 'https://placehold.jp/80x120.png';
 

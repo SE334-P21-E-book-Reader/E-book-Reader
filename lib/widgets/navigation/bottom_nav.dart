@@ -40,7 +40,7 @@ class BottomNav extends StatelessWidget {
               Expanded(
                 child: _NavItem(
                   icon: Icons.bookmark,
-                  isActive: activeItem == 'library',
+                  isActive: activeItem == 'bookmarks',
                   onTap: () => onItemSelected(1),
                 ),
               ),

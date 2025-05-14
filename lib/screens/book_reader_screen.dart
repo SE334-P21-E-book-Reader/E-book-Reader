@@ -2,7 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:flutter_gen/gen_l10n/app_localizations.dart';
-import '../widgets/book_grid.dart';
+import '../widgets/library/book_grid.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../cubit/theme/theme_cubit.dart';
 
