@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_gen/gen_l10n/app_localizations.dart';
-import 'book_grid.dart';
+import '../../models/book.dart';
 
 const String kPlaceholderImage = 'https://placehold.jp/80x120.png';
 
@@ -8,12 +8,14 @@ class BookList extends StatelessWidget {
   final List<Book> books;
   final String searchQuery;
   final void Function(Book) onBookClick;
+  final void Function(Book) onBookLongPress;
 
   const BookList({
     super.key,
     required this.books,
     required this.searchQuery,
     required this.onBookClick,
+    required this.onBookLongPress,
   });
 
   @override
@@ -50,6 +52,7 @@ class BookList extends StatelessWidget {
         return InkWell(
           borderRadius: BorderRadius.circular(12),
           onTap: () => onBookClick(book),
+          onLongPress: () => onBookLongPress(book),
           child: Container(
             padding: const EdgeInsets.all(8),
             decoration: BoxDecoration(

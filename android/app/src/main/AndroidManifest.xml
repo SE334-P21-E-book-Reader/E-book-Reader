@@ -42,7 +42,10 @@
             <data android:mimeType="text/plain"/>
         </intent>
     </queries>
+    <!-- Android 13+ granular media permissions -->
     <uses-permission android:name="android.permission.READ_MEDIA_IMAGES"/>
     <uses-permission android:name="android.permission.READ_MEDIA_VIDEO"/>
     <uses-permission android:name="android.permission.READ_MEDIA_AUDIO"/>
+    <!-- Legacy storage permission for Android 10 and below -->
+    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"/>
 </manifest>

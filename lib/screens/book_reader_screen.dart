@@ -2,681 +2,437 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:flutter_gen/gen_l10n/app_localizations.dart';
-import '../widgets/library/book_grid.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../cubit/theme/theme_cubit.dart';
+import '../models/book.dart';
+import 'dart:io';
+import 'package:permission_handler/permission_handler.dart';
+import 'package:pdfrx/pdfrx.dart';
+import 'dart:io' show Platform;
+import 'package:device_info_plus/device_info_plus.dart';
+import 'package:http/http.dart' as http;
+import 'package:path_provider/path_provider.dart';
+import 'package:flutter_epub_viewer/flutter_epub_viewer.dart';
+import '../cubit/reader_cubit.dart';
 
-class BookReaderScreen extends StatefulWidget {
+class BookReaderScreen extends StatelessWidget {
   final Book book;
   const BookReaderScreen({Key? key, required this.book}) : super(key: key);
 
   @override
-  State<BookReaderScreen> createState() => _BookReaderScreenState();
+  Widget build(BuildContext context) {
+    return BlocProvider<ReaderCubit>(
+      create: (_) => ReaderCubit(book.id),
+      child: _BookReaderScreenBody(book: book),
+    );
+  }
 }
 
-class _BookReaderScreenState extends State<BookReaderScreen> {
-  double? fontSize;
+class _BookReaderScreenBody extends StatefulWidget {
+  final Book book;
+  const _BookReaderScreenBody({Key? key, required this.book}) : super(key: key);
+
+  @override
+  State<_BookReaderScreenBody> createState() => _BookReaderScreenBodyState();
+}
+
+class _BookReaderScreenBodyState extends State<_BookReaderScreenBody> {
+  final TransformationController _transformationController =
+      TransformationController();
   double scale = 1.0;
   bool isBookmarked = false;
-  bool showSettings = false;
-  bool showControls = true;
-  Timer? _hideTimer;
-  final bool _isMenuOpen = false;
-  bool _isSliderActive = false;
-  bool useZoom = true; // default to Non-OCR (zoom mode)
-  bool _isDocMenuOpen = false;
-  OverlayEntry? _docMenuOverlay;
-  final GlobalKey _docIconKey = GlobalKey();
-  int _currentPage = 1;
-  final int _totalPages = 189; // Example, replace with actual book data
-  Timer? _zoomTimer;
-  bool _isZooming = false;
+  late final EpubController _epubController = EpubController();
+  final PdfViewerController _pdfController = PdfViewerController();
+  PdfDocument? _pdfDocument;
+  List<PdfOutline>? _pdfOutline;
+  bool _isSearching = false;
+  String _searchQuery = '';
+  List<int> _searchResults = [];
+  int _currentSearchIndex = 0;
 
   @override
   void initState() {
     super.initState();
-    // Get initial font size from ThemeCubit
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      final themeCubit = context.read<ThemeCubit>();
-      setState(() {
-        fontSize = 16 * themeCubit.fontSizeScale;
-      });
-    });
-    _startHideTimer();
+    _transformationController.addListener(_onMatrixChanged);
   }
 
-  void _startHideTimer() {
-    _hideTimer?.cancel();
-    if (showControls && !_isMenuOpen && !_isSliderActive && !_isDocMenuOpen) {
-      _hideTimer = Timer(const Duration(seconds: 3), () {
-        setState(() {
-          showControls = false;
-        });
+  void _onMatrixChanged() {
+    final matrix = _transformationController.value;
+    final newScale = matrix.getMaxScaleOnAxis().clamp(0.5, 4.0);
+    if ((scale - newScale).abs() > 0.01) {
+      setState(() {
+        scale = newScale;
       });
     }
   }
 
-  void _toggleBookmark() {
-    setState(() {
-      isBookmarked = !isBookmarked;
-    });
-  }
-
-  void _handleContentTap() {
-    setState(() {
-      showControls = !showControls;
-      if (showSettings) showSettings = false;
-    });
-    if (showControls) _startHideTimer();
-  }
-
-  void _handleFontSizeChange(double newSize) {
-    setState(() {
-      fontSize = newSize;
-    });
-    // Optionally update global font size scale
-    // final themeProvider = Provider.of<ThemeProvider>(context, listen: false);
-    // themeProvider.setFontSize((newSize - 12) / 6); // Map 12-24 to 0-2
-  }
-
-  void _onBarInteraction() {
-    // Show controls and cancel hide timer, but do not start a new timer
-    setState(() {
-      showControls = true;
-    });
-    _hideTimer?.cancel();
-  }
-
-  void _navigateToLibrary() {
-    Navigator.of(context).pop();
-  }
-
-  void _showDocMenu() {
-    if (_docMenuOverlay != null) return;
-    final RenderBox iconBox =
-        _docIconKey.currentContext!.findRenderObject() as RenderBox;
-    final Offset iconPosition = iconBox.localToGlobal(Offset.zero);
-    final Size iconSize = iconBox.size;
-    _docMenuOverlay = OverlayEntry(
-      builder: (context) => Stack(
-        children: [
-          // Dismiss area
-          Positioned.fill(
-            child: GestureDetector(
-              behavior: HitTestBehavior.translucent,
-              onTap: () {
-                setState(() {
-                  _isDocMenuOpen = false;
-                  showControls = false;
-                });
-                _docMenuOverlay?.remove();
-                _docMenuOverlay = null;
-              },
-            ),
-          ),
-          Positioned(
-            left: iconPosition.dx - 120, // move menu to the left of the icon
-            top: iconPosition.dy + iconSize.height,
-            child: Material(
-              color: Colors.transparent,
-              child: Container(
-                alignment: Alignment.centerLeft,
-                decoration: BoxDecoration(
-                  color: Theme.of(context).colorScheme.surface,
-                  borderRadius: BorderRadius.circular(8),
-                  boxShadow: const [
-                    BoxShadow(blurRadius: 8, color: Colors.black26)
-                  ],
-                ),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    _buildMenuItem(context, 'Non-OCR', Icons.image, useZoom,
-                        () {
-                      setState(() {
-                        useZoom = true;
-                        _isDocMenuOpen = false;
-                      });
-                      _docMenuOverlay?.remove();
-                      _docMenuOverlay = null;
-                      _startHideTimer();
-                    }),
-                    _buildMenuItem(context, 'OCR', Icons.text_fields, !useZoom,
-                        () {
-                      setState(() {
-                        useZoom = false;
-                        _isDocMenuOpen = false;
-                      });
-                      _docMenuOverlay?.remove();
-                      _docMenuOverlay = null;
-                      _startHideTimer();
-                    }),
-                  ],
-                ),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-    Overlay.of(context).insert(_docMenuOverlay!);
-    setState(() {
-      _isDocMenuOpen = true;
-    });
-    _hideTimer?.cancel();
-  }
-
-  Widget _buildMenuItem(BuildContext context, String label, IconData icon,
-      bool selected, VoidCallback onTap) {
-    return InkWell(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
-        color: selected
-            ? Theme.of(context).colorScheme.primary.withValues(alpha: 0.1)
-            : Colors.transparent,
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.center,
-          mainAxisAlignment: MainAxisAlignment.start,
-          children: [
-            Icon(icon,
-                color: selected ? Theme.of(context).colorScheme.primary : null),
-            const SizedBox(width: 8),
-            Text(label,
-                style: TextStyle(
-                    fontWeight:
-                        selected ? FontWeight.bold : FontWeight.normal)),
-          ],
-        ),
-      ),
-    );
-  }
-
-  void _goToPreviousPage() {
-    setState(() {
-      if (_currentPage > 1) _currentPage--;
-    });
-  }
-
-  void _goToNextPage() {
-    setState(() {
-      if (_currentPage < _totalPages) _currentPage++;
-    });
-  }
-
-  void _goToFirstPage() {
-    setState(() {
-      _currentPage = 1;
-      showControls = true;
-    });
-    _hideTimer?.cancel();
-  }
-
-  void _goToLastPage() {
-    setState(() {
-      _currentPage = _totalPages;
-      showControls = true;
-    });
-    _hideTimer?.cancel();
-  }
-
-  void _handleZoomChange(double newScale) {
-    setState(() {
-      scale = newScale.clamp(0.5, 4.0);
-    });
-  }
-
-  void _startZooming(bool zoomIn) {
-    _zoomTimer?.cancel();
-    _isZooming = true;
-    showControls = true;
-    _hideTimer?.cancel();
-    _zoomTimer = Timer.periodic(const Duration(milliseconds: 80), (_) {
-      setState(() {
-        showControls = true;
-        if (zoomIn) {
-          scale = (scale + 0.1).clamp(0.5, 4.0);
-        } else {
-          scale = (scale - 0.1).clamp(0.5, 4.0);
-        }
-      });
-    });
-  }
-
-  void _stopZooming() {
-    _zoomTimer?.cancel();
-    _isZooming = false;
-    setState(() {
-      showControls = true;
-    });
-  }
-
   @override
   void dispose() {
-    _hideTimer?.cancel();
-    _zoomTimer?.cancel();
+    // _pdfController?.dispose(); // Not needed for pdfrx
+    _transformationController.dispose();
     super.dispose();
   }
 
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
-    final l10n = AppLocalizations.of(context)!;
-    final fontSz = fontSize ?? 16 * context.watch<ThemeCubit>().fontSizeScale;
-    const double barHeight = 64;
-    return Scaffold(
-      backgroundColor: colorScheme.surface,
-      body: Stack(
-        children: [
-          // Main Content Area (tappable except bars)
-          Positioned.fill(
-            top: showControls ? barHeight : 0,
-            bottom: showControls ? barHeight : 0,
-            child: GestureDetector(
-              onTap: _handleContentTap,
-              behavior: HitTestBehavior.opaque,
-              child: useZoom
-                  ? InteractiveViewer(
-                      minScale: 1.0,
-                      maxScale: 2.5,
-                      scaleEnabled: true,
-                      panEnabled: true,
-                      child: Transform.scale(
-                        scale: scale,
-                        alignment: Alignment.center,
-                        child: _ReaderContent(
-                            fontSize: fontSz, l10n: l10n, book: widget.book),
-                      ),
-                    )
-                  : Align(
-                      alignment: Alignment.center,
-                      child: _ReaderContent(
-                          fontSize: fontSz, l10n: l10n, book: widget.book),
-                    ),
-            ),
+  Future<void> _loadPdfOutline() async {
+    if (_pdfDocument == null) return;
+    setState(() {
+      _pdfOutline = _pdfDocument!.outline;
+    });
+  }
+
+  void _showPdfTocDialog(BuildContext context) async {
+    if (_pdfDocument == null) return;
+    if (_pdfOutline == null) await _loadPdfOutline();
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(AppLocalizations.of(context)!.contents),
+        content: _pdfOutline == null || _pdfOutline!.isEmpty
+            ? const Text('No table of contents available.')
+            : SizedBox(
+                width: 300,
+                height: 400,
+                child: ListView(
+                  children: _buildOutlineList(_pdfOutline!),
+                ),
+              ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: Text(MaterialLocalizations.of(context).okButtonLabel),
           ),
-          // Top App Bar
-          if (showControls)
-            Positioned(
-              top: 16,
-              left: 0,
-              right: 0,
-              child: GestureDetector(
-                behavior: HitTestBehavior.opaque,
-                onTap: _onBarInteraction,
-                child: AnimatedOpacity(
-                  opacity: showControls ? 1 : 0,
-                  duration: const Duration(milliseconds: 300),
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 16, vertical: 12),
-                    decoration: BoxDecoration(
-                      color: colorScheme.surface.withValues(alpha: 0.95),
-                      border: Border(
-                        bottom: BorderSide(
-                            color:
-                                colorScheme.secondary.withValues(alpha: 0.2)),
-                      ),
-                    ),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Row(
-                          children: [
-                            IconButton(
-                              icon: const Icon(Icons.chevron_left, size: 32),
-                              color: colorScheme.primary,
-                              onPressed: () {
-                                _navigateToLibrary();
-                              },
-                              tooltip: l10n.library,
-                            ),
-                            const SizedBox(width: 8),
-                            Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  widget.book.title,
-                                  style: theme.textTheme.bodyMedium?.copyWith(
-                                      fontWeight: FontWeight.w600,
-                                      color: colorScheme.onSurface),
-                                ),
-                                Text(
-                                  widget.book.author,
-                                  style: theme.textTheme.bodySmall
-                                      ?.copyWith(color: colorScheme.secondary),
-                                ),
-                              ],
-                            ),
-                          ],
-                        ),
-                        Row(
-                          children: [
-                            IconButton(
-                              icon: Icon(
-                                isBookmarked
-                                    ? Icons.bookmark
-                                    : Icons.bookmark_border,
-                                color: isBookmarked
-                                    ? colorScheme.primary
-                                    : colorScheme.onSurface,
-                              ),
-                              onPressed: _toggleBookmark,
-                              tooltip: l10n.bookmark,
-                            ),
-                            IconButton(
-                              key: _docIconKey,
-                              icon: const Icon(Icons.description),
-                              color: colorScheme.onSurface,
-                              onPressed: _showDocMenu,
-                              tooltip: 'Document Options',
-                            ),
-                            IconButton(
-                              icon: Icon(
-                                theme.brightness == Brightness.dark
-                                    ? Icons.light_mode
-                                    : Icons.dark_mode,
-                                color: colorScheme.onSurface,
-                              ),
-                              onPressed: () {
-                                final themeCubit = context.read<ThemeCubit>();
-                                themeCubit.setThemeMode(
-                                  theme.brightness == Brightness.dark
-                                      ? ThemeMode.light
-                                      : ThemeMode.dark,
-                                );
-                              },
-                              tooltip: theme.brightness == Brightness.dark
-                                  ? l10n.theme
-                                  : l10n.darkMode,
-                            ),
-                          ],
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          // Bottom Controls
-          if (showControls)
-            Positioned(
-              left: 0,
-              right: 0,
-              bottom: 0,
-              child: GestureDetector(
-                behavior: HitTestBehavior.opaque,
-                onTap: _onBarInteraction,
-                child: AnimatedOpacity(
-                  opacity: showControls ? 1 : 0,
-                  duration: const Duration(milliseconds: 300),
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 16, vertical: 12),
-                    decoration: BoxDecoration(
-                      color: colorScheme.surface.withValues(alpha: 0.95),
-                      border: Border(
-                        top: BorderSide(
-                            color:
-                                colorScheme.secondary.withValues(alpha: 0.2)),
-                      ),
-                    ),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        // Page navigation row
-                        Row(
-                          children: [
-                            IconButton(
-                              icon: const Icon(Icons.first_page),
-                              onPressed: _goToFirstPage,
-                              tooltip: 'First Page',
-                            ),
-                            IconButton(
-                              icon: const Icon(Icons.chevron_left),
-                              onPressed: () {
-                                _goToPreviousPage();
-                                setState(() {
-                                  showControls = true;
-                                });
-                                _hideTimer?.cancel();
-                              },
-                              tooltip: l10n.library, // or 'Previous Page'
-                            ),
-                            Expanded(
-                              child: Center(
-                                child: Text(
-                                    l10n.pageIndicator(
-                                        _currentPage, _totalPages),
-                                    style: theme.textTheme.bodySmall?.copyWith(
-                                        color: colorScheme.secondary)),
-                              ),
-                            ),
-                            IconButton(
-                              icon: const Icon(Icons.chevron_right),
-                              onPressed: () {
-                                _goToNextPage();
-                                setState(() {
-                                  showControls = true;
-                                });
-                                _hideTimer?.cancel();
-                              },
-                              tooltip: l10n.library, // or 'Next Page'
-                            ),
-                            IconButton(
-                              icon: const Icon(Icons.last_page),
-                              onPressed: _goToLastPage,
-                              tooltip: 'Last Page',
-                            ),
-                          ],
-                        ),
-                        // Zoom/font size row
-                        Row(
-                          children: [
-                            GestureDetector(
-                              onTapDown:
-                                  useZoom ? (_) => _startZooming(false) : null,
-                              onTapUp: useZoom ? (_) => _stopZooming() : null,
-                              onTapCancel: useZoom ? _stopZooming : null,
-                              child: IconButton(
-                                icon: useZoom
-                                    ? const Icon(Icons.zoom_out)
-                                    : const Text('A',
-                                        style: TextStyle(fontSize: 14)),
-                                onPressed: () {
-                                  if (useZoom) {
-                                    setState(() {
-                                      scale = (scale - 0.1).clamp(0.5, 4.0);
-                                    });
-                                  } else {
-                                    _handleFontSizeChange(
-                                        fontSz > 12 ? fontSz - 1 : 12);
-                                  }
-                                },
-                                tooltip: useZoom ? 'Zoom out' : l10n.small,
-                              ),
-                            ),
-                            Expanded(
-                              child: Listener(
-                                onPointerDown: (_) {
-                                  if (_isZooming) _stopZooming();
-                                },
-                                child: Slider(
-                                  value:
-                                      useZoom ? scale.clamp(0.5, 4.0) : fontSz,
-                                  min: useZoom ? 0.5 : 12,
-                                  max: useZoom ? 4.0 : 24,
-                                  divisions: useZoom ? 35 : 12,
-                                  label: useZoom
-                                      ? '${(scale * 100).toStringAsFixed(0)}%'
-                                      : fontSz.toStringAsFixed(0),
-                                  onChangeStart: (_) {
-                                    setState(() {
-                                      _isSliderActive = true;
-                                    });
-                                    _hideTimer?.cancel();
-                                    if (_isZooming) _stopZooming();
-                                  },
-                                  onChanged: (value) {
-                                    if (useZoom) {
-                                      _handleZoomChange(value);
-                                    } else {
-                                      _handleFontSizeChange(value);
-                                    }
-                                  },
-                                  onChangeEnd: (_) {
-                                    setState(() {
-                                      _isSliderActive = false;
-                                    });
-                                    if (!_isZooming) {
-                                      _startHideTimer();
-                                    }
-                                  },
-                                  activeColor: colorScheme.primary,
-                                  inactiveColor: colorScheme.secondary,
-                                ),
-                              ),
-                            ),
-                            GestureDetector(
-                              onTapDown:
-                                  useZoom ? (_) => _startZooming(true) : null,
-                              onTapUp: useZoom ? (_) => _stopZooming() : null,
-                              onTapCancel: useZoom ? _stopZooming : null,
-                              child: IconButton(
-                                icon: useZoom
-                                    ? const Icon(Icons.zoom_in)
-                                    : const Text('A',
-                                        style: TextStyle(
-                                            fontSize: 20,
-                                            fontWeight: FontWeight.bold)),
-                                onPressed: () {
-                                  if (useZoom) {
-                                    setState(() {
-                                      scale = (scale + 0.1).clamp(0.5, 4.0);
-                                    });
-                                  } else {
-                                    _handleFontSizeChange(
-                                        fontSz < 24 ? fontSz + 1 : 24);
-                                  }
-                                },
-                                tooltip: useZoom ? 'Zoom in' : l10n.large,
-                              ),
-                            ),
-                          ],
-                        ),
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.end,
-                          children: [
-                            Text(
-                                '${((_currentPage / _totalPages) * 100).toStringAsFixed(0)}%',
-                                style: theme.textTheme.bodySmall
-                                    ?.copyWith(color: colorScheme.secondary)),
-                          ],
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          // Settings Panel
-          if (showSettings)
-            Positioned.fill(
-              child: GestureDetector(
-                onTap: () {
-                  setState(() {
-                    showSettings = false;
-                  });
-                },
-                child: Container(
-                  color: colorScheme.surface.withValues(alpha: 0.95),
-                  child: Center(
-                    child: _ReaderSettings(
-                      fontSize: fontSz,
-                      setFontSize: _handleFontSizeChange,
-                      onClose: () {
-                        setState(() {
-                          showSettings = false;
-                        });
-                      },
-                      l10n: l10n,
-                    ),
-                  ),
-                ),
-              ),
-            ),
         ],
       ),
     );
   }
-}
 
-// Placeholder for ReaderContent
-class _ReaderContent extends StatelessWidget {
-  final double fontSize;
-  final AppLocalizations l10n;
-  final Book book;
-  const _ReaderContent(
-      {required this.fontSize, required this.l10n, required this.book});
+  List<Widget> _buildOutlineList(List<PdfOutline> outlines, {int indent = 0}) {
+    List<Widget> widgets = [];
+    for (final item in outlines) {
+      widgets.add(ListTile(
+        contentPadding: EdgeInsets.only(left: 16.0 * indent),
+        title: Text(item.title ?? 'Untitled'),
+        onTap: () {
+          Navigator.of(context).pop();
+          if (item.pageNumber != null) {
+            _pdfController.goToPage(item.pageNumber!);
+          }
+        },
+      ));
+      if (item.children != null && item.children!.isNotEmpty) {
+        widgets.addAll(_buildOutlineList(item.children!, indent: indent + 1));
+      }
+    }
+    return widgets;
+  }
 
-  @override
-  Widget build(BuildContext context) {
-    return Center(
-      child: Text(
-        '${l10n.noBooksFound}\n${book.title}', // TODO: Replace with book content
-        style: Theme.of(context)
-            .textTheme
-            .bodyMedium
-            ?.copyWith(fontSize: fontSize),
-        textAlign: TextAlign.center,
+  void _showPdfSearchDialog(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (context) {
+        final TextEditingController searchController = TextEditingController();
+        return StatefulBuilder(
+          builder: (context, setState) => AlertDialog(
+            title: Text(AppLocalizations.of(context)!.search),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(
+                  controller: searchController,
+                  decoration:
+                      const InputDecoration(hintText: 'Enter text to search'),
+                  onSubmitted: (value) async {
+                    setState(() => _isSearching = true);
+                    final doc = _pdfDocument;
+                    if (doc != null && value.isNotEmpty) {
+                      List<int> results = [];
+                      for (int i = 0; i < doc.pages.length; i++) {
+                        final text = await doc.pages[i].text;
+                        if (text != null &&
+                            text.toLowerCase().contains(value.toLowerCase())) {
+                          results.add(i + 1);
+                        }
+                      }
+                      setState(() {
+                        _searchQuery = value;
+                        _searchResults = results;
+                        _currentSearchIndex = 0;
+                        _isSearching = false;
+                      });
+                      if (results.isNotEmpty) {
+                        _pdfController.goToPage(results[0]);
+                      }
+                    }
+                  },
+                ),
+                if (_isSearching)
+                  const Padding(
+                    padding: EdgeInsets.only(top: 16),
+                    child: CircularProgressIndicator(),
+                  ),
+                if (_searchResults.isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 16),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                            'Result: ${_currentSearchIndex + 1}/${_searchResults.length}'),
+                        Row(
+                          children: [
+                            IconButton(
+                              icon: const Icon(Icons.arrow_back),
+                              onPressed: _currentSearchIndex > 0
+                                  ? () {
+                                      setState(() {
+                                        _currentSearchIndex--;
+                                        _pdfController.goToPage(_searchResults[
+                                            _currentSearchIndex]);
+                                      });
+                                    }
+                                  : null,
+                            ),
+                            IconButton(
+                              icon: const Icon(Icons.arrow_forward),
+                              onPressed: _currentSearchIndex <
+                                      _searchResults.length - 1
+                                  ? () {
+                                      setState(() {
+                                        _currentSearchIndex++;
+                                        _pdfController.goToPage(_searchResults[
+                                            _currentSearchIndex]);
+                                      });
+                                    }
+                                  : null,
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                if (!_isSearching &&
+                    _searchResults.isEmpty &&
+                    _searchQuery.isNotEmpty)
+                  const Padding(
+                    padding: EdgeInsets.only(top: 16),
+                    child: Text('No results found.'),
+                  ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(),
+                child: Text(MaterialLocalizations.of(context).okButtonLabel),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  void _showEpubTocDialog(BuildContext context) {
+    // flutter_epub_viewer does not expose TOC, so show a placeholder
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(AppLocalizations.of(context)!.contents),
+        content:
+            const Text('Table of contents is not available for this EPUB.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: Text(MaterialLocalizations.of(context).okButtonLabel),
+          ),
+        ],
       ),
     );
   }
-}
-
-// Placeholder for ReaderSettings
-class _ReaderSettings extends StatelessWidget {
-  final double fontSize;
-  final ValueChanged<double> setFontSize;
-  final VoidCallback onClose;
-  final AppLocalizations l10n;
-  const _ReaderSettings(
-      {required this.fontSize,
-      required this.setFontSize,
-      required this.onClose,
-      required this.l10n});
 
   @override
   Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(24.0),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(l10n.settings, style: Theme.of(context).textTheme.titleMedium),
-            const SizedBox(height: 16),
-            Text(l10n.fontSize, style: Theme.of(context).textTheme.bodyMedium),
-            Slider(
-              value: fontSize,
-              min: 12,
-              max: 24,
-              divisions: 12,
-              onChanged: setFontSize,
-              activeColor: colorScheme.primary,
-              inactiveColor: colorScheme.secondary,
+    final readerState = context.watch<ReaderCubit>().state;
+    final l10n = AppLocalizations.of(context)!;
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    return Scaffold(
+      appBar: AppBar(
+        title: Text(widget.book.title),
+        actions: [
+          IconButton(
+            icon: Icon(
+              isBookmarked ? Icons.bookmark : Icons.bookmark_border,
+              color: isBookmarked ? colorScheme.primary : colorScheme.onSurface,
             ),
-            const SizedBox(height: 16),
-            ElevatedButton(
-              onPressed: onClose,
-              child: Text(l10n.settingsDescription),
+            onPressed: () {
+              setState(() {
+                isBookmarked = !isBookmarked;
+              });
+            },
+            tooltip: l10n.bookmark,
+          ),
+          IconButton(
+            icon: Icon(
+              theme.brightness == Brightness.dark
+                  ? Icons.light_mode
+                  : Icons.dark_mode,
+              color: colorScheme.onSurface,
             ),
-          ],
-        ),
+            onPressed: () {
+              final themeCubit = context.read<ThemeCubit>();
+              themeCubit.setThemeMode(
+                theme.brightness == Brightness.dark
+                    ? ThemeMode.light
+                    : ThemeMode.dark,
+              );
+            },
+            tooltip: theme.brightness == Brightness.dark
+                ? l10n.theme
+                : l10n.darkMode,
+          ),
+          IconButton(
+            icon: const Icon(Icons.menu_book),
+            tooltip: l10n.contents,
+            onPressed: () {
+              if (widget.book.format.toUpperCase() == 'PDF') {
+                _showPdfTocDialog(context);
+              } else {
+                _showEpubTocDialog(context);
+              }
+            },
+          ),
+          IconButton(
+            icon: const Icon(Icons.search),
+            tooltip: l10n.search,
+            onPressed: () {
+              if (widget.book.format.toUpperCase() == 'PDF') {
+                _showPdfSearchDialog(context);
+              } else {
+                showDialog(
+                  context: context,
+                  builder: (context) => AlertDialog(
+                    title: Text(l10n.search),
+                    content: const Text('EPUB search is not yet implemented.'),
+                    actions: [
+                      TextButton(
+                        onPressed: () => Navigator.of(context).pop(),
+                        child: Text(
+                            MaterialLocalizations.of(context).okButtonLabel),
+                      ),
+                    ],
+                  ),
+                );
+              }
+            },
+          ),
+        ],
       ),
+      body: widget.book.format.toUpperCase() == 'PDF'
+          ? FutureBuilder<String>(
+              future: _getLocalPdfPath(widget.book.link),
+              builder: (context, snapshot) {
+                if (snapshot.connectionState == ConnectionState.waiting) {
+                  return const Center(child: CircularProgressIndicator());
+                }
+                if (snapshot.hasError) {
+                  return Center(
+                      child: Text('Failed to load PDF: \\${snapshot.error}'));
+                }
+                if (!snapshot.hasData) {
+                  return const Center(child: Text('No PDF file found.'));
+                }
+                final localPath = snapshot.data!;
+                debugPrint('PDF localPath: $localPath');
+                final file = File(localPath);
+                if (!file.existsSync() && !localPath.startsWith('http')) {
+                  return Center(
+                      child: Text('PDF file does not exist at $localPath'));
+                }
+                return PdfViewer.file(
+                  localPath,
+                  controller: _pdfController,
+                  params: PdfViewerParams(
+                    enableTextSelection: true,
+                    viewerOverlayBuilder: (context, size, handleLinkTap) => [
+                      GestureDetector(
+                        behavior: HitTestBehavior.translucent,
+                        onDoubleTap: () {
+                          _pdfController.zoomUp(loop: true);
+                        },
+                        onTapUp: (details) {
+                          handleLinkTap(details.localPosition);
+                        },
+                        child: IgnorePointer(
+                          child:
+                              SizedBox(width: size.width, height: size.height),
+                        ),
+                      ),
+                      PdfViewerScrollThumb(
+                        controller: _pdfController,
+                        orientation: ScrollbarOrientation.right,
+                        thumbSize: const Size(40, 25),
+                        thumbBuilder:
+                            (context, thumbSize, pageNumber, controller) =>
+                                Container(
+                          color: Colors.black.withOpacity(0.5),
+                          child: Center(
+                            child: Text(
+                              pageNumber.toString(),
+                              style: const TextStyle(color: Colors.white),
+                            ),
+                          ),
+                        ),
+                      ),
+                      PdfViewerScrollThumb(
+                        controller: _pdfController,
+                        orientation: ScrollbarOrientation.bottom,
+                        thumbSize: const Size(80, 30),
+                        thumbBuilder:
+                            (context, thumbSize, pageNumber, controller) =>
+                                Container(
+                          color: Colors.black.withOpacity(0.5),
+                        ),
+                      ),
+                    ],
+                    onDocumentChanged: (doc) async {
+                      _pdfDocument = doc;
+                      await _loadPdfOutline();
+                    },
+                  ),
+                );
+              },
+            )
+          : EpubViewer(
+              epubSource: EpubSource.fromFile(File(widget.book.link)),
+              epubController: _epubController,
+            ),
     );
   }
+
+  Future<String> _getLocalPdfPath(String link) async {
+    if (link.startsWith('http')) {
+      final appDir = await getApplicationDocumentsDirectory();
+      final fileName = link.split('/').last.split('?').first;
+      final localPath = '${appDir.path}/$fileName';
+      final localFile = File(localPath);
+      if (!await localFile.exists()) {
+        final response = await http.get(Uri.parse(link));
+        if (response.statusCode == 200) {
+          await localFile.writeAsBytes(response.bodyBytes);
+        } else {
+          throw Exception('Failed to download PDF: \\${response.statusCode}');
+        }
+      }
+      return localPath;
+    } else {
+      return link;
+    }
+  }
+}
+
+bool isInAppData(String path) {
+  if (!Platform.isAndroid) return true; // Always allow on non-Android
+  return path.contains('/app_flutter/') ||
+      path.contains('/data/user/0/') ||
+      path.contains('/data/data/');
 }

@@ -1,21 +1,6 @@
+import '../../models/book.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_gen/gen_l10n/app_localizations.dart';
-
-class Book {
-  final String id;
-  final String title;
-  final String author;
-  final String? coverUrl;
-  final String format;
-
-  Book({
-    required this.id,
-    required this.title,
-    required this.author,
-    this.coverUrl,
-    required this.format,
-  });
-}
 
 const String kPlaceholderImage = 'https://placehold.jp/80x120.png';
 
@@ -23,12 +8,14 @@ class BookGrid extends StatelessWidget {
   final List<Book> books;
   final String searchQuery;
   final void Function(Book) onBookClick;
+  final void Function(Book) onBookLongPress;
 
   const BookGrid({
     super.key,
     required this.books,
     required this.searchQuery,
     required this.onBookClick,
+    required this.onBookLongPress,
   });
 
   @override
@@ -68,6 +55,7 @@ class BookGrid extends StatelessWidget {
         final book = filteredBooks[index];
         return GestureDetector(
           onTap: () => onBookClick(book),
+          onLongPress: () => onBookLongPress(book),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [

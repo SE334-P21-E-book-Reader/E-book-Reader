@@ -1,4 +1,4 @@
-import '../widgets/library/book_grid.dart';
+import '../models/book.dart';
 
 final List<Book> mockBooks = [
   Book(
@@ -7,6 +7,10 @@ final List<Book> mockBooks = [
     author: 'F. Scott Fitzgerald',
     coverUrl: '',
     format: 'EPUB',
+    link: '',
+    userId: 'mockUser',
+    numberOfPage: 100,
+    lastPage: 1,
   ),
   Book(
     id: '2',
@@ -14,6 +18,10 @@ final List<Book> mockBooks = [
     author: 'George Orwell',
     coverUrl: '',
     format: 'PDF',
+    link: '',
+    userId: 'mockUser',
+    numberOfPage: 120,
+    lastPage: 1,
   ),
   Book(
     id: '3',
@@ -21,6 +29,10 @@ final List<Book> mockBooks = [
     author: 'Harper Lee',
     coverUrl: '',
     format: 'EPUB',
+    link: '',
+    userId: 'mockUser',
+    numberOfPage: 90,
+    lastPage: 1,
   ),
   Book(
     id: '4',
@@ -28,6 +40,10 @@ final List<Book> mockBooks = [
     author: 'Jane Austen',
     coverUrl: '',
     format: 'PDF',
+    link: '',
+    userId: 'mockUser',
+    numberOfPage: 110,
+    lastPage: 1,
   ),
 ];
 

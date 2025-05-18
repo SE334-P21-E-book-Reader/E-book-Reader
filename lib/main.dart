@@ -10,6 +10,7 @@ import 'cubit/language/language_cubit.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'screens/library_screen.dart';
 import 'screens/bookmarks_screen.dart';
+import 'cubit/book/book_cubit.dart';
 
 void main() async {
   // Đảm bảo Flutter được khởi tạo
@@ -124,7 +125,10 @@ class _MainScreenState extends State<MainScreen> {
   int _selectedIndex = 0;
 
   final List<Widget> _screens = [
-    const LibraryScreen(),
+    BlocProvider(
+      create: (_) => BookCubit()..loadBooks(),
+      child: const LibraryScreen(),
+    ),
     const BookmarksScreen(),
     const SettingsScreen(),
   ];

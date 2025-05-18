@@ -89,5 +89,9 @@
     "bookmarksDeleteTitle": "Delete bookmark",
     "@bookmarksDeleteTitle": {"description": "Title for the delete bookmark confirmation dialog."},
     "bookmarksDeleteConfirm": "Are you sure you want to delete this bookmark? This action cannot be undone.",
-    "@bookmarksDeleteConfirm": {"description": "Confirmation message for deleting a bookmark."}
+    "@bookmarksDeleteConfirm": {"description": "Confirmation message for deleting a bookmark."},
+    "contents": "Contents",
+    "@contents": {"description": "Button label and dialog title for table of contents in the reader screen."},
+    "search": "Search",
+    "@search": {"description": "Button label and dialog title for search in the reader screen."}
 } 

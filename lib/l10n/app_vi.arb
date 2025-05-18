@@ -89,5 +89,9 @@
     "bookmarksDeleteTitle": "Xóa dấu trang",
     "@bookmarksDeleteTitle": {"description": "Tiêu đề xác nhận xóa dấu trang."},
     "bookmarksDeleteConfirm": "Bạn có chắc chắn muốn xóa dấu trang này? Hành động này không thể hoàn tác.",
-    "@bookmarksDeleteConfirm": {"description": "Thông báo xác nhận xóa dấu trang."}
+    "@bookmarksDeleteConfirm": {"description": "Thông báo xác nhận xóa dấu trang."},
+    "contents": "Mục lục",
+    "@contents": {"description": "Nhãn nút và tiêu đề hộp thoại cho mục lục ở màn hình đọc sách."},
+    "search": "Tìm kiếm",
+    "@search": {"description": "Nhãn nút và tiêu đề hộp thoại cho tìm kiếm ở màn hình đọc sách."}
 } 
