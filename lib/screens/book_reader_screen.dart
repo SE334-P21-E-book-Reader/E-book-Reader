@@ -1,19 +1,21 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
 import 'package:flutter_gen/gen_l10n/app_localizations.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../cubit/theme/theme_cubit.dart';
 import '../models/book.dart';
 import 'dart:io';
-import 'package:permission_handler/permission_handler.dart';
-import 'package:pdfrx/pdfrx.dart';
-import 'dart:io' show Platform;
-import 'package:device_info_plus/device_info_plus.dart';
+import 'package:syncfusion_flutter_pdfviewer/pdfviewer.dart';
+import 'package:syncfusion_flutter_pdf/pdf.dart';
 import 'package:http/http.dart' as http;
 import 'package:path_provider/path_provider.dart';
 import 'package:flutter_epub_viewer/flutter_epub_viewer.dart';
 import '../cubit/reader_cubit.dart';
+import 'package:flutter/services.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
+import '../cubit/language/language_cubit.dart';
+import 'package:syncfusion_localizations/syncfusion_localizations.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class BookReaderScreen extends StatelessWidget {
   final Book book;
@@ -23,7 +25,7 @@ class BookReaderScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     return BlocProvider<ReaderCubit>(
       create: (_) => ReaderCubit(book.id),
-      child: _BookReaderScreenBody(book: book),
+      child: _BookReaderScreenBody(key: ValueKey(book.id), book: book),
     );
   }
 }
@@ -36,66 +38,135 @@ class _BookReaderScreenBody extends StatefulWidget {
   State<_BookReaderScreenBody> createState() => _BookReaderScreenBodyState();
 }
 
-class _BookReaderScreenBodyState extends State<_BookReaderScreenBody> {
-  final TransformationController _transformationController =
-      TransformationController();
-  double scale = 1.0;
+class _BookReaderScreenBodyState extends State<_BookReaderScreenBody> with AutomaticKeepAliveClientMixin {
+  static final Map<String, PdfViewerController> _controllerCache = {};
+  static final Map<String, Future<String>> _futureCache = {};
+
+  PdfViewerController get _pdfController =>
+      _controllerCache.putIfAbsent(widget.book.id, () => PdfViewerController());
+  Future<String> get _pdfPathFuture =>
+      _futureCache.putIfAbsent(widget.book.id, () => _getLocalPdfPath(widget.book.link));
+
   bool isBookmarked = false;
   late final EpubController _epubController = EpubController();
-  final PdfViewerController _pdfController = PdfViewerController();
-  PdfDocument? _pdfDocument;
-  List<PdfOutline>? _pdfOutline;
+  PdfBookmarkBase? _pdfBookmarks;
   bool _isSearching = false;
-  String _searchQuery = '';
-  List<int> _searchResults = [];
-  int _currentSearchIndex = 0;
+  final GlobalKey<SfPdfViewerState> _pdfViewerKey = GlobalKey();
+  PdfTextSearchResult _searchResult = PdfTextSearchResult();
+  String _searchText = '';
+  final TextEditingController _searchController = TextEditingController();
+  bool _showSearchBar = false;
+  OverlayEntry? _overlayEntry;
+  PdfScrollDirection _scrollDirection = PdfScrollDirection.vertical;
+  int _currentPage = 1;
+  int _totalPages = 1;
+
+  @override
+  bool get wantKeepAlive => true;
 
   @override
   void initState() {
     super.initState();
-    _transformationController.addListener(_onMatrixChanged);
+    _loadScrollDirection();
+    _searchResult.addListener(_onSearchResultChanged);
   }
 
-  void _onMatrixChanged() {
-    final matrix = _transformationController.value;
-    final newScale = matrix.getMaxScaleOnAxis().clamp(0.5, 4.0);
-    if ((scale - newScale).abs() > 0.01) {
-      setState(() {
-        scale = newScale;
-      });
-    }
+  Future<void> _loadScrollDirection() async {
+    final prefs = await SharedPreferences.getInstance();
+    final saved = prefs.getString('reader_scroll_direction');
+    setState(() {
+      if (saved == 'horizontal') {
+        _scrollDirection = PdfScrollDirection.horizontal;
+      } else {
+        _scrollDirection = PdfScrollDirection.vertical;
+      }
+    });
+  }
+
+  Future<void> _saveScrollDirection(PdfScrollDirection direction) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('reader_scroll_direction', direction == PdfScrollDirection.horizontal ? 'horizontal' : 'vertical');
+  }
+
+  void _onSearchResultChanged() {
+    if (mounted) setState(() {
+      _isSearching = false;
+    });
   }
 
   @override
   void dispose() {
-    // _pdfController?.dispose(); // Not needed for pdfrx
-    _transformationController.dispose();
+    _searchResult.removeListener(_onSearchResultChanged);
+    _searchResult.dispose();
     super.dispose();
   }
 
-  Future<void> _loadPdfOutline() async {
-    if (_pdfDocument == null) return;
+  void _startSearch(String value) {
+    final searchValue = value.toLowerCase();
+    if (searchValue.isEmpty) {
+      setState(() {
+        _searchText = '';
+        _searchResult.removeListener(_onSearchResultChanged);
+        _searchResult.clear();
+        _searchResult.addListener(_onSearchResultChanged);
+        _isSearching = false;
+      });
+      return;
+    }
     setState(() {
-      _pdfOutline = _pdfDocument!.outline;
+      _isSearching = true;
+    });
+
+    _searchResult.removeListener(_onSearchResultChanged);
+    _searchResult = _pdfController.searchText(
+      searchValue,
+    );
+    _searchResult.addListener(_onSearchResultChanged);
+
+    setState(() {
+      _searchText = searchValue;
     });
   }
 
-  void _showPdfTocDialog(BuildContext context) async {
-    if (_pdfDocument == null) return;
-    if (_pdfOutline == null) await _loadPdfOutline();
+  void _clearSearch() {
+    setState(() {
+      _searchText = '';
+      _searchController.clear();
+      _searchResult.removeListener(_onSearchResultChanged);
+      _searchResult.clear();
+      _searchResult.addListener(_onSearchResultChanged);
+      _showSearchBar = false;
+    });
+  }
+
+  void _showPdfTocDialog(BuildContext context) {
+    if (_pdfBookmarks == null || _pdfBookmarks!.count == 0) {
+      showDialog(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: Text(AppLocalizations.of(context)!.contents),
+          content: const Text('No table of contents available.'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: Text(MaterialLocalizations.of(context).okButtonLabel),
+            ),
+          ],
+        ),
+      );
+      return;
+    }
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
         title: Text(AppLocalizations.of(context)!.contents),
-        content: _pdfOutline == null || _pdfOutline!.isEmpty
-            ? const Text('No table of contents available.')
-            : SizedBox(
-                width: 300,
-                height: 400,
-                child: ListView(
-                  children: _buildOutlineList(_pdfOutline!),
-                ),
-              ),
+        content: SizedBox(
+          width: 300,
+          height: 400,
+          child: ListView(
+            children: _buildBookmarkList(_pdfBookmarks!),
+          ),
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(),
@@ -106,129 +177,25 @@ class _BookReaderScreenBodyState extends State<_BookReaderScreenBody> {
     );
   }
 
-  List<Widget> _buildOutlineList(List<PdfOutline> outlines, {int indent = 0}) {
+  List<Widget> _buildBookmarkList(PdfBookmarkBase bookmarks, {int indent = 0}) {
     List<Widget> widgets = [];
-    for (final item in outlines) {
+    for (int i = 0; i < bookmarks.count; i++) {
+      final bookmark = bookmarks[i];
       widgets.add(ListTile(
         contentPadding: EdgeInsets.only(left: 16.0 * indent),
-        title: Text(item.title ?? 'Untitled'),
+        title: Text(bookmark.title),
         onTap: () {
           Navigator.of(context).pop();
-          if (item.pageNumber != null) {
-            _pdfController.goToPage(item.pageNumber!);
+          if (bookmark is PdfBookmark) {
+            _pdfController.jumpToBookmark(bookmark);
           }
         },
       ));
-      if (item.children != null && item.children!.isNotEmpty) {
-        widgets.addAll(_buildOutlineList(item.children!, indent: indent + 1));
+      if (bookmark.count > 0) {
+        widgets.addAll(_buildBookmarkList(bookmark, indent: indent + 1));
       }
     }
     return widgets;
-  }
-
-  void _showPdfSearchDialog(BuildContext context) {
-    showDialog(
-      context: context,
-      builder: (context) {
-        final TextEditingController searchController = TextEditingController();
-        return StatefulBuilder(
-          builder: (context, setState) => AlertDialog(
-            title: Text(AppLocalizations.of(context)!.search),
-            content: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                TextField(
-                  controller: searchController,
-                  decoration:
-                      const InputDecoration(hintText: 'Enter text to search'),
-                  onSubmitted: (value) async {
-                    setState(() => _isSearching = true);
-                    final doc = _pdfDocument;
-                    if (doc != null && value.isNotEmpty) {
-                      List<int> results = [];
-                      for (int i = 0; i < doc.pages.length; i++) {
-                        final text = await doc.pages[i].text;
-                        if (text != null &&
-                            text.toLowerCase().contains(value.toLowerCase())) {
-                          results.add(i + 1);
-                        }
-                      }
-                      setState(() {
-                        _searchQuery = value;
-                        _searchResults = results;
-                        _currentSearchIndex = 0;
-                        _isSearching = false;
-                      });
-                      if (results.isNotEmpty) {
-                        _pdfController.goToPage(results[0]);
-                      }
-                    }
-                  },
-                ),
-                if (_isSearching)
-                  const Padding(
-                    padding: EdgeInsets.only(top: 16),
-                    child: CircularProgressIndicator(),
-                  ),
-                if (_searchResults.isNotEmpty)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 16),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text(
-                            'Result: ${_currentSearchIndex + 1}/${_searchResults.length}'),
-                        Row(
-                          children: [
-                            IconButton(
-                              icon: const Icon(Icons.arrow_back),
-                              onPressed: _currentSearchIndex > 0
-                                  ? () {
-                                      setState(() {
-                                        _currentSearchIndex--;
-                                        _pdfController.goToPage(_searchResults[
-                                            _currentSearchIndex]);
-                                      });
-                                    }
-                                  : null,
-                            ),
-                            IconButton(
-                              icon: const Icon(Icons.arrow_forward),
-                              onPressed: _currentSearchIndex <
-                                      _searchResults.length - 1
-                                  ? () {
-                                      setState(() {
-                                        _currentSearchIndex++;
-                                        _pdfController.goToPage(_searchResults[
-                                            _currentSearchIndex]);
-                                      });
-                                    }
-                                  : null,
-                            ),
-                          ],
-                        ),
-                      ],
-                    ),
-                  ),
-                if (!_isSearching &&
-                    _searchResults.isEmpty &&
-                    _searchQuery.isNotEmpty)
-                  const Padding(
-                    padding: EdgeInsets.only(top: 16),
-                    child: Text('No results found.'),
-                  ),
-              ],
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.of(context).pop(),
-                child: Text(MaterialLocalizations.of(context).okButtonLabel),
-              ),
-            ],
-          ),
-        );
-      },
-    );
   }
 
   void _showEpubTocDialog(BuildContext context) {
@@ -251,14 +218,36 @@ class _BookReaderScreenBodyState extends State<_BookReaderScreenBody> {
 
   @override
   Widget build(BuildContext context) {
-    final readerState = context.watch<ReaderCubit>().state;
+    super.build(context);
     final l10n = AppLocalizations.of(context)!;
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
     return Scaffold(
       appBar: AppBar(
-        title: Text(widget.book.title),
+        // No title to hide the PDF/book name
         actions: [
+          IconButton(
+            icon: Icon(_showSearchBar ? Icons.close : Icons.search),
+            tooltip: l10n.search,
+            onPressed: () {
+              setState(() {
+                if (_showSearchBar) {
+                  _clearSearch();
+                } else {
+                  _showSearchBar = true;
+                }
+              });
+            },
+          ),
+          IconButton(
+            icon: const Icon(Icons.zoom_out_map),
+            tooltip: 'Reset Zoom',
+            onPressed: () {
+              setState(() {
+                _pdfController.zoomLevel = 1.0;
+              });
+            },
+          ),
           IconButton(
             icon: Icon(
               isBookmarked ? Icons.bookmark : Icons.bookmark_border,
@@ -302,110 +291,293 @@ class _BookReaderScreenBodyState extends State<_BookReaderScreenBody> {
             },
           ),
           IconButton(
-            icon: const Icon(Icons.search),
-            tooltip: l10n.search,
+            icon: Icon(_scrollDirection == PdfScrollDirection.vertical ? Icons.swap_horiz : Icons.swap_vert),
+            tooltip: _scrollDirection == PdfScrollDirection.vertical
+                ? 'Switch to Horizontal Scroll'
+                : 'Switch to Vertical Scroll',
             onPressed: () {
-              if (widget.book.format.toUpperCase() == 'PDF') {
-                _showPdfSearchDialog(context);
-              } else {
-                showDialog(
-                  context: context,
-                  builder: (context) => AlertDialog(
-                    title: Text(l10n.search),
-                    content: const Text('EPUB search is not yet implemented.'),
-                    actions: [
-                      TextButton(
-                        onPressed: () => Navigator.of(context).pop(),
-                        child: Text(
-                            MaterialLocalizations.of(context).okButtonLabel),
-                      ),
-                    ],
-                  ),
-                );
-              }
+              setState(() {
+                _scrollDirection = _scrollDirection == PdfScrollDirection.vertical
+                    ? PdfScrollDirection.horizontal
+                    : PdfScrollDirection.vertical;
+              });
+              _saveScrollDirection(_scrollDirection);
             },
           ),
         ],
       ),
-      body: widget.book.format.toUpperCase() == 'PDF'
-          ? FutureBuilder<String>(
-              future: _getLocalPdfPath(widget.book.link),
-              builder: (context, snapshot) {
-                if (snapshot.connectionState == ConnectionState.waiting) {
-                  return const Center(child: CircularProgressIndicator());
-                }
-                if (snapshot.hasError) {
-                  return Center(
-                      child: Text('Failed to load PDF: \\${snapshot.error}'));
-                }
-                if (!snapshot.hasData) {
-                  return const Center(child: Text('No PDF file found.'));
-                }
-                final localPath = snapshot.data!;
-                debugPrint('PDF localPath: $localPath');
-                final file = File(localPath);
-                if (!file.existsSync() && !localPath.startsWith('http')) {
-                  return Center(
-                      child: Text('PDF file does not exist at $localPath'));
-                }
-                return PdfViewer.file(
-                  localPath,
-                  controller: _pdfController,
-                  params: PdfViewerParams(
-                    enableTextSelection: true,
-                    viewerOverlayBuilder: (context, size, handleLinkTap) => [
-                      GestureDetector(
-                        behavior: HitTestBehavior.translucent,
-                        onDoubleTap: () {
-                          _pdfController.zoomUp(loop: true);
-                        },
-                        onTapUp: (details) {
-                          handleLinkTap(details.localPosition);
-                        },
-                        child: IgnorePointer(
-                          child:
-                              SizedBox(width: size.width, height: size.height),
-                        ),
+      body: Column(
+        children: [
+          if (widget.book.format.toUpperCase() == 'PDF' && _showSearchBar)
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              child: Row(
+                children: [
+                  Flexible(
+                    flex: 6,
+                    child: TextField(
+                      controller: _searchController,
+                      decoration: InputDecoration(
+                        hintText: l10n.search,
+                        border: const OutlineInputBorder(),
+                        isDense: true,
+                        suffixIcon: _searchText.isNotEmpty
+                            ? IconButton(
+                                icon: const Icon(Icons.clear),
+                                onPressed: _clearSearch,
+                              )
+                            : null,
                       ),
-                      PdfViewerScrollThumb(
-                        controller: _pdfController,
-                        orientation: ScrollbarOrientation.right,
-                        thumbSize: const Size(40, 25),
-                        thumbBuilder:
-                            (context, thumbSize, pageNumber, controller) =>
-                                Container(
-                          color: Colors.black.withOpacity(0.5),
-                          child: Center(
-                            child: Text(
-                              pageNumber.toString(),
-                              style: const TextStyle(color: Colors.white),
-                            ),
-                          ),
-                        ),
-                      ),
-                      PdfViewerScrollThumb(
-                        controller: _pdfController,
-                        orientation: ScrollbarOrientation.bottom,
-                        thumbSize: const Size(80, 30),
-                        thumbBuilder:
-                            (context, thumbSize, pageNumber, controller) =>
-                                Container(
-                          color: Colors.black.withOpacity(0.5),
-                        ),
-                      ),
-                    ],
-                    onDocumentChanged: (doc) async {
-                      _pdfDocument = doc;
-                      await _loadPdfOutline();
-                    },
+                      autofocus: false,
+                      onSubmitted: _startSearch,
+                    ),
                   ),
-                );
-              },
-            )
-          : EpubViewer(
-              epubSource: EpubSource.fromFile(File(widget.book.link)),
-              epubController: _epubController,
+                  SizedBox(width: 8),
+                  if (_searchText.isNotEmpty)
+                    Flexible(
+                      flex: 4,
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.end,
+                        children: [
+                          IconButton(
+                            icon: const Icon(Icons.arrow_back),
+                            tooltip: 'Previous',
+                            onPressed: (_searchResult.totalInstanceCount > 0)
+                                ? () {
+                                    setState(() {
+                                      _searchResult.previousInstance();
+                                    });
+                                  }
+                                : null,
+                          ),
+                          Text(
+                            _searchResult.totalInstanceCount > 0
+                                ? '${_searchResult.currentInstanceIndex} / ${_searchResult.totalInstanceCount}'
+                                : '0 / 0',
+                            style: Theme.of(context).textTheme.bodyMedium,
+                          ),
+                          IconButton(
+                            icon: const Icon(Icons.arrow_forward),
+                            tooltip: 'Next',
+                            onPressed: (_searchResult.totalInstanceCount > 0)
+                                ? () {
+                                    setState(() {
+                                      _searchResult.nextInstance();
+                                    });
+                                  }
+                                : null,
+                          ),
+                        ],
+                      ),
+                    ),
+                ],
+              ),
             ),
+          Expanded(
+            child: widget.book.format.toUpperCase() == 'PDF'
+                ? FutureBuilder<String>(
+                    future: _pdfPathFuture,
+                    builder: (context, snapshot) {
+                      if (snapshot.connectionState == ConnectionState.waiting) {
+                        return const Center(child: CircularProgressIndicator());
+                      }
+                      if (snapshot.hasError) {
+                        return Center(
+                            child: Text('Failed to load PDF: ${snapshot.error}'));
+                      }
+                      if (!snapshot.hasData) {
+                        return const Center(child: Text('No PDF file found.'));
+                      }
+                      final localPath = snapshot.data!;
+                      final file = File(localPath);
+                      if (!file.existsSync() && !localPath.startsWith('http')) {
+                        return Center(
+                            child: Text('PDF file does not exist at $localPath'));
+                      }
+                      final pdfViewer = localPath.startsWith('http')
+                          ? SfPdfViewer.network(
+                              localPath,
+                              key: _pdfViewerKey,
+                              controller: _pdfController,
+                              enableTextSelection: true,
+                              canShowTextSelectionMenu: true,
+                              canShowScrollHead: true,
+                              canShowScrollStatus: true,
+                              scrollDirection: _scrollDirection,
+                              pageLayoutMode: _scrollDirection == PdfScrollDirection.horizontal
+                                  ? PdfPageLayoutMode.single
+                                  : PdfPageLayoutMode.continuous,
+                              onDocumentLoaded: (PdfDocumentLoadedDetails details) {
+                                setState(() {
+                                  _pdfBookmarks = details.document.bookmarks;
+                                  _totalPages = details.document.pages.count;
+                                });
+                                context.read<ReaderCubit>().setTotalPages(details.document.pages.count);
+                              },
+                              onPageChanged: (PdfPageChangedDetails details) {
+                                setState(() {
+                                  _currentPage = details.newPageNumber;
+                                });
+                                context.read<ReaderCubit>().setPdfPage(details.newPageNumber);
+                              },
+                              onAnnotationAdded: (annotation) async {
+                                // Only allow one annotation of the same type on the same text selection
+                                final annotations = _pdfController.getAnnotations();
+                                // Find duplicates of the same type on the same text
+                                for (final existing in annotations) {
+                                  if (existing == annotation) continue;
+                                  if (existing.runtimeType == annotation.runtimeType) {
+                                    // Compare the selected text or bounds if possible
+                                    if (existing.toString() == annotation.toString()) {
+                                      // Remove the previous annotation of the same type on the same text
+                                      _pdfController.removeAnnotation(existing);
+                                    }
+                                  }
+                                }
+                              },
+                              enableHyperlinkNavigation: true,
+                              enableDocumentLinkAnnotation: true,
+                              enableDoubleTapZooming: true,
+                              maxZoomLevel: 5.0,
+                              onZoomLevelChanged: (details) {
+                                // Optionally handle zoom level changes (e.g., analytics, logging)
+                              },
+                            )
+                          : SfPdfViewer.file(
+                              file,
+                              key: _pdfViewerKey,
+                              controller: _pdfController,
+                              enableTextSelection: true,
+                              canShowTextSelectionMenu: true,
+                              canShowScrollHead: true,
+                              canShowScrollStatus: true,
+                              scrollDirection: _scrollDirection,
+                              pageLayoutMode: _scrollDirection == PdfScrollDirection.horizontal
+                                  ? PdfPageLayoutMode.single
+                                  : PdfPageLayoutMode.continuous,
+                              onDocumentLoaded: (PdfDocumentLoadedDetails details) {
+                                setState(() {
+                                  _pdfBookmarks = details.document.bookmarks;
+                                  _totalPages = details.document.pages.count;
+                                });
+                                context.read<ReaderCubit>().setTotalPages(details.document.pages.count);
+                              },
+                              onPageChanged: (PdfPageChangedDetails details) {
+                                setState(() {
+                                  _currentPage = details.newPageNumber;
+                                });
+                                context.read<ReaderCubit>().setPdfPage(details.newPageNumber);
+                              },
+                              onAnnotationAdded: (annotation) async {
+                                // Only allow one annotation of the same type on the same text selection
+                                final annotations = _pdfController.getAnnotations();
+                                // Find duplicates of the same type on the same text
+                                for (final existing in annotations) {
+                                  if (existing == annotation) continue;
+                                  if (existing.runtimeType == annotation.runtimeType) {
+                                    // Compare the selected text or bounds if possible
+                                    if (existing.toString() == annotation.toString()) {
+                                      // Remove the previous annotation of the same type on the same text
+                                      _pdfController.removeAnnotation(existing);
+                                      _pdfController.removeAnnotation(annotation);
+                                    }
+                                  }
+                                }
+                              },
+                              enableHyperlinkNavigation: true,
+                              enableDocumentLinkAnnotation: true,
+                              enableDoubleTapZooming: true,
+                              maxZoomLevel: 5.0,
+                              onZoomLevelChanged: (details) {
+                                // Optionally handle zoom level changes (e.g., analytics, logging)
+                              },
+                            );
+                      return Stack(
+                        children: [
+                          pdfViewer,
+                          if (_scrollDirection == PdfScrollDirection.horizontal)
+                            Positioned(
+                              left: 0,
+                              right: 0,
+                              bottom: 0,
+                              child: Container(
+                                color: Theme.of(context).colorScheme.surface,
+                                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                                child: Row(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    IconButton(
+                                      icon: const Icon(Icons.first_page),
+                                      tooltip: 'First Page',
+                                      onPressed: _currentPage > 1
+                                          ? () {
+                                              _pdfController.jumpToPage(1);
+                                            }
+                                          : null,
+                                    ),
+                                    IconButton(
+                                      icon: const Icon(Icons.chevron_left),
+                                      tooltip: 'Previous Page',
+                                      onPressed: _currentPage > 1
+                                          ? () {
+                                              _pdfController.previousPage();
+                                            }
+                                          : null,
+                                    ),
+                                    Text(
+                                      'Page $_currentPage/$_totalPages',
+                                      style: Theme.of(context).textTheme.bodyMedium,
+                                    ),
+                                    IconButton(
+                                      icon: const Icon(Icons.chevron_right),
+                                      tooltip: 'Next Page',
+                                      onPressed: _currentPage < _totalPages
+                                          ? () {
+                                              _pdfController.nextPage();
+                                            }
+                                          : null,
+                                    ),
+                                    IconButton(
+                                      icon: const Icon(Icons.last_page),
+                                      tooltip: 'Last Page',
+                                      onPressed: _currentPage < _totalPages
+                                          ? () {
+                                              _pdfController.jumpToPage(_totalPages);
+                                            }
+                                          : null,
+                                    ),
+                                    const Spacer(),
+                                    if (_totalPages > 0)
+                                      Container(
+                                        margin: const EdgeInsets.only(right: 4),
+                                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                        decoration: BoxDecoration(
+                                          color: Theme.of(context).colorScheme.primary.withOpacity(0.08),
+                                          borderRadius: BorderRadius.circular(12),
+                                        ),
+                                        child: Text(
+                                          '${((_currentPage / _totalPages) * 100).toStringAsFixed(0)}%',
+                                          style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                                color: Theme.of(context).colorScheme.primary,
+                                                fontWeight: FontWeight.w600,
+                                              ),
+                                        ),
+                                      ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                        ],
+                      );
+                    },
+                  )
+                : EpubViewer(
+                    epubSource: EpubSource.fromFile(File(widget.book.link)),
+                    epubController: _epubController,
+                  ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -420,7 +592,7 @@ class _BookReaderScreenBodyState extends State<_BookReaderScreenBody> {
         if (response.statusCode == 200) {
           await localFile.writeAsBytes(response.bodyBytes);
         } else {
-          throw Exception('Failed to download PDF: \\${response.statusCode}');
+          throw Exception('Failed to download PDF: ${response.statusCode}');
         }
       }
       return localPath;

@@ -46,8 +46,6 @@ class _LibraryScreenState extends State<LibraryScreen>
 
   void _showBookMenu(BuildContext context, Book book) async {
     final l10n = AppLocalizations.of(context)!;
-    final RenderBox overlay =
-        Overlay.of(context).context.findRenderObject() as RenderBox;
     final result = await showMenu<String>(
       context: context,
       position: RelativeRect.fromLTRB(
@@ -58,8 +56,8 @@ class _LibraryScreenState extends State<LibraryScreen>
       ),
       items: [
         PopupMenuItem(value: 'read', child: Text(l10n.bookmark)),
-        PopupMenuItem(value: 'edit', child: Text('Edit')),
-        PopupMenuItem(value: 'delete', child: Text('Delete')),
+        const PopupMenuItem(value: 'edit', child: Text('Edit')),
+        const PopupMenuItem(value: 'delete', child: Text('Delete')),
       ],
     );
     if (result == 'read') {
@@ -88,8 +86,8 @@ class _LibraryScreenState extends State<LibraryScreen>
       final confirmed = await showDialog<bool>(
         context: context,
         builder: (context) => AlertDialog(
-          title: Text('Delete Book'),
-          content: Text(
+          title: const Text('Delete Book'),
+          content: const Text(
               'Are you sure you want to delete this book? This action cannot be undone.'),
           actions: [
             TextButton(
@@ -146,7 +144,7 @@ class _LibraryScreenState extends State<LibraryScreen>
                           if (file.extension == 'pdf' ||
                               file.extension == 'epub') {
                             if (!mounted) return;
-                            final userId =
+                            const userId =
                                 'mockUser'; // Replace with real userId if using FirebaseAuth
                             Future<void> tryAddBook(String fileName) async {
                               await context.read<BookCubit>().addBook(

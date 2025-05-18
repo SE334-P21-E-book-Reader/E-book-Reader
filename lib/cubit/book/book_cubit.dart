@@ -6,8 +6,6 @@ import 'package:firebase_storage/firebase_storage.dart';
 import 'dart:io';
 import 'dart:convert';
 import 'package:uuid/uuid.dart';
-import 'package:file_picker/file_picker.dart';
-import 'package:flutter/material.dart';
 part 'book_state.dart';
 
 class BookCubit extends Cubit<BookState> {

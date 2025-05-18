@@ -38,7 +38,7 @@ class BookmarkCard extends StatelessWidget {
                   height: 60,
                   decoration: BoxDecoration(
                     borderRadius: BorderRadius.circular(8),
-                    color: colorScheme.surfaceVariant,
+                    color: colorScheme.surfaceContainerHighest,
                   ),
                   child: const Icon(Icons.menu_book, size: 32),
                 ),

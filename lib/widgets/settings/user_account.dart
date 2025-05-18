@@ -13,7 +13,7 @@ class UserAccount extends StatefulWidget {
 class _UserAccountState extends State<UserAccount> {
   String? _avatarPath;
   String _username = 'Username';
-  String _email = 'user@example.com';
+  final String _email = 'user@example.com';
 
   void _pickAvatar() async {
     FilePickerResult? result =
@@ -64,7 +64,7 @@ class _UserAccountState extends State<UserAccount> {
                     });
                     Navigator.pop(context);
                   },
-                  child: Text('Save'),
+                  child: const Text('Save'),
                 ),
               ),
             ],
@@ -79,12 +79,12 @@ class _UserAccountState extends State<UserAccount> {
       context: context,
       builder: (context) => AlertDialog(
         title: Text(AppLocalizations.of(context)!.accountInfo),
-        content: Text(
+        content: const Text(
             'A password reset link will be sent to your email. (TODO: Integrate Firebase)'),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: Text('OK'),
+            child: const Text('OK'),
           ),
         ],
       ),

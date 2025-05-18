@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_gen/gen_l10n/app_localizations.dart';
 import '../database/mock_database.dart';
 import 'book_reader_screen.dart';
-import '../widgets/library/book_grid.dart';
 import '../widgets/components/search_bar.dart' as components;
 import '../widgets/bookmark/bookmark_card.dart';
 
@@ -15,7 +14,7 @@ class BookmarksScreen extends StatefulWidget {
 
 class _BookmarksScreenState extends State<BookmarksScreen> {
   String _searchQuery = '';
-  List<Bookmark> _bookmarks = List.from(mockBookmarks);
+  final List<Bookmark> _bookmarks = List.from(mockBookmarks);
 
   void _deleteBookmark(Bookmark bookmark) async {
     final l10n = AppLocalizations.of(context)!;

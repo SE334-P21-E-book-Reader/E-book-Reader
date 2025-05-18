@@ -922,6 +922,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "29.2.4"
+  syncfusion_localizations:
+    dependency: "direct main"
+    description:
+      name: syncfusion_localizations
+      sha256: aabacddf8fca7037eac2a59aca3b860932c2f79367ea92642b5526ddca79c38f
+      url: "https://pub.dev"
+    source: hosted
+    version: "29.2.4"
   syncfusion_pdfviewer_macos:
     dependency: transitive
     description:
