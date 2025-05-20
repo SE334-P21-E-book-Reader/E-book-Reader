@@ -48,11 +48,9 @@ dependencies:
   path_provider: ^2.1.2
   firebase_storage: ^11.6.5
   uuid: ^4.3.3
-  epub_view: ^3.2.0
+  flutter_epub_viewer: ^1.2.1
   permission_handler: ^11.3.0
   device_info_plus: ^11.4.0
-  flutter_epub_viewer: ^1.2.0
-  pdfrx: ^1.1.29
   syncfusion_flutter_pdfviewer: ^29.1.41
   syncfusion_localizations: ^29.2.4
 

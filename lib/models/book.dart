@@ -8,7 +8,7 @@ class Book {
   final String link; // Firebase Storage link
   final String userId;
   final int numberOfPage;
-  final int lastPage;
+  final int lastReadPage;
 
   Book({
     required this.id,
@@ -19,7 +19,7 @@ class Book {
     required this.link,
     required this.userId,
     required this.numberOfPage,
-    required this.lastPage,
+    required this.lastReadPage,
   });
 
   // Add fromMap/toMap for Firebase/Local storage
@@ -33,7 +33,7 @@ class Book {
       link: map['link'] as String,
       userId: map['userId'] as String,
       numberOfPage: map['numberOfPage'] as int? ?? 0,
-      lastPage: map['lastPage'] as int? ?? 0,
+      lastReadPage: map['lastReadPage'] as int? ?? 0,
     );
   }
 
@@ -47,7 +47,7 @@ class Book {
       'link': link,
       'userId': userId,
       'numberOfPage': numberOfPage,
-      'lastPage': lastPage,
+      'lastReadPage': lastReadPage,
     };
   }
 }

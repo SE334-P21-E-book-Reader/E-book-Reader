@@ -92,7 +92,7 @@ class BookCubit extends Cubit<BookState> {
         link: localFile.path, // local path for reading
         userId: userId,
         numberOfPage: 0, // TODO: parse number of pages
-        lastPage: 1,
+        lastReadPage: 1,
       );
       final updatedBooks = List<Book>.from(state.books)..add(book);
       emit(state.copyWith(books: updatedBooks, isLoading: false));
@@ -123,7 +123,7 @@ class BookCubit extends Cubit<BookState> {
         link: downloadUrl, // now remote link
         userId: book.userId,
         numberOfPage: book.numberOfPage,
-        lastPage: book.lastPage,
+        lastReadPage: book.lastReadPage,
       );
       final updatedBooks =
           books.map((b) => b.id == book.id ? updatedBook : b).toList();
@@ -176,7 +176,7 @@ class BookCubit extends Cubit<BookState> {
       link: oldBook.link,
       userId: oldBook.userId,
       numberOfPage: oldBook.numberOfPage,
-      lastPage: oldBook.lastPage,
+      lastReadPage: oldBook.lastReadPage,
     );
     final updatedBooks = List<Book>.from(books);
     updatedBooks[idx] = updatedBook;

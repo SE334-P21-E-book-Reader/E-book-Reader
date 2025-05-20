@@ -5,12 +5,12 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_gen/gen_l10n/app_localizations.dart';
 import 'screens/settings_screen.dart';
 import 'widgets/navigation/bottom_nav.dart';
-import 'cubit/theme/theme_cubit.dart';
-import 'cubit/language/language_cubit.dart';
+import 'bloc/theme/theme_cubit.dart';
+import 'bloc/language/language_cubit.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'screens/library_screen.dart';
 import 'screens/bookmarks_screen.dart';
-import 'cubit/book/book_cubit.dart';
+import 'bloc/book/book_cubit.dart';
 
 void main() async {
   // Đảm bảo Flutter được khởi tạo

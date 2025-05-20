@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_gen/gen_l10n/app_localizations.dart';
 import '../database/mock_database.dart';
-import 'book_reader_screen.dart';
+import 'pdf_reader_screen.dart';
 import '../widgets/components/search_bar.dart' as components;
 import '../widgets/bookmark/bookmark_card.dart';
 
@@ -42,19 +42,19 @@ class _BookmarksScreenState extends State<BookmarksScreen> {
     }
   }
 
-  void _navigateToReader(Bookmark bookmark) {
-    try {
-      final book = mockBooks.firstWhere((b) => b.id == bookmark.bookId);
-      Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (context) => BookReaderScreen(book: book),
-        ),
-      );
-    } catch (e) {
-      // Book not found, do nothing
-    }
-  }
+  // void _navigateToReader(Bookmark bookmark) {
+  //   try {
+  //     // final book = mockBooks.firstWhere((b) => b.id == bookmark.bookId);
+  //     Navigator.push(
+  //       context,
+  //       MaterialPageRoute(
+  //         builder: (context) => BookReaderScreen(book: book),
+  //       ),
+  //     );
+  //   } catch (e) {
+  //     // Book not found, do nothing
+  //   }
+  // }
 
   @override
   Widget build(BuildContext context) {
@@ -152,7 +152,7 @@ class _BookmarksScreenState extends State<BookmarksScreen> {
                               bookmark: bookmark,
                               compact: true,
                               onDelete: () => _deleteBookmark(bookmark),
-                              onTap: () => _navigateToReader(bookmark),
+                              // onTap: () => _navigateToReader(bookmark),
                             ),
                           ],
                         );

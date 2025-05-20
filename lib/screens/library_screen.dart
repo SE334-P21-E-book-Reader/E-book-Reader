@@ -4,12 +4,13 @@ import '../widgets/library/book_grid.dart';
 import '../widgets/library/book_list.dart';
 // import '../database/mock_database.dart';
 import 'package:file_picker/file_picker.dart';
-import '../screens/book_reader_screen.dart';
+import '../screens/pdf_reader_screen.dart';
+import '../screens/epub_reader_screen.dart';
 import '../widgets/components/search_bar.dart' as components;
 import '../widgets/components/icon_switch.dart';
 // Will use BookCubit for book list
 import 'package:flutter_bloc/flutter_bloc.dart';
-import '../cubit/book/book_cubit.dart';
+import '../bloc/book/book_cubit.dart';
 import 'dart:io';
 import '../widgets/components/dialog_utils.dart';
 import '../models/book.dart';
@@ -63,7 +64,7 @@ class _LibraryScreenState extends State<LibraryScreen>
     if (result == 'read') {
       Navigator.push(
         context,
-        MaterialPageRoute(builder: (context) => BookReaderScreen(book: book)),
+        MaterialPageRoute(builder: (context) => PDFReaderScreen(book: book)),
       );
     } else if (result == 'edit') {
       final books = context.read<BookCubit>().state.books;
@@ -253,13 +254,27 @@ class _LibraryScreenState extends State<LibraryScreen>
                               books: books,
                               searchQuery: _searchQuery,
                               onBookClick: (book) {
-                                Navigator.push(
-                                  context,
-                                  MaterialPageRoute(
-                                    builder: (context) =>
-                                        BookReaderScreen(book: book),
-                                  ),
-                                );
+                                if (book.format.toUpperCase() == 'PDF') {
+                                  Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (context) =>
+                                          PDFReaderScreen(book: book),
+                                    ),
+                                  );
+                                } else {
+                                  Navigator.of(context).push(
+                                    PageRouteBuilder(
+                                      pageBuilder: (context, animation,
+                                              secondaryAnimation) =>
+                                          EPUBReaderScreen(book: book),
+                                      transitionsBuilder: (context, animation,
+                                          secondaryAnimation, child) {
+                                        return child;
+                                      },
+                                    ),
+                                  );
+                                }
                               },
                               onBookLongPress: (book) =>
                                   _showBookMenu(context, book),
@@ -268,13 +283,27 @@ class _LibraryScreenState extends State<LibraryScreen>
                               books: books,
                               searchQuery: _searchQuery,
                               onBookClick: (book) {
-                                Navigator.push(
-                                  context,
-                                  MaterialPageRoute(
-                                    builder: (context) =>
-                                        BookReaderScreen(book: book),
-                                  ),
-                                );
+                                if (book.format.toUpperCase() == 'PDF') {
+                                  Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (context) =>
+                                          PDFReaderScreen(book: book),
+                                    ),
+                                  );
+                                } else {
+                                  Navigator.of(context).push(
+                                    PageRouteBuilder(
+                                      pageBuilder: (context, animation,
+                                              secondaryAnimation) =>
+                                          EPUBReaderScreen(book: book),
+                                      transitionsBuilder: (context, animation,
+                                          secondaryAnimation, child) {
+                                        return child;
+                                      },
+                                    ),
+                                  );
+                                }
                               },
                               onBookLongPress: (book) =>
                                   _showBookMenu(context, book),
@@ -287,13 +316,27 @@ class _LibraryScreenState extends State<LibraryScreen>
                                   .toList(),
                               searchQuery: _searchQuery,
                               onBookClick: (book) {
-                                Navigator.push(
-                                  context,
-                                  MaterialPageRoute(
-                                    builder: (context) =>
-                                        BookReaderScreen(book: book),
-                                  ),
-                                );
+                                if (book.format.toUpperCase() == 'PDF') {
+                                  Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (context) =>
+                                          PDFReaderScreen(book: book),
+                                    ),
+                                  );
+                                } else {
+                                  Navigator.of(context).push(
+                                    PageRouteBuilder(
+                                      pageBuilder: (context, animation,
+                                              secondaryAnimation) =>
+                                          EPUBReaderScreen(book: book),
+                                      transitionsBuilder: (context, animation,
+                                          secondaryAnimation, child) {
+                                        return child;
+                                      },
+                                    ),
+                                  );
+                                }
                               },
                               onBookLongPress: (book) =>
                                   _showBookMenu(context, book),
@@ -305,13 +348,27 @@ class _LibraryScreenState extends State<LibraryScreen>
                                   .toList(),
                               searchQuery: _searchQuery,
                               onBookClick: (book) {
-                                Navigator.push(
-                                  context,
-                                  MaterialPageRoute(
-                                    builder: (context) =>
-                                        BookReaderScreen(book: book),
-                                  ),
-                                );
+                                if (book.format.toUpperCase() == 'PDF') {
+                                  Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (context) =>
+                                          PDFReaderScreen(book: book),
+                                    ),
+                                  );
+                                } else {
+                                  Navigator.of(context).push(
+                                    PageRouteBuilder(
+                                      pageBuilder: (context, animation,
+                                              secondaryAnimation) =>
+                                          EPUBReaderScreen(book: book),
+                                      transitionsBuilder: (context, animation,
+                                          secondaryAnimation, child) {
+                                        return child;
+                                      },
+                                    ),
+                                  );
+                                }
                               },
                               onBookLongPress: (book) =>
                                   _showBookMenu(context, book),
@@ -323,13 +380,27 @@ class _LibraryScreenState extends State<LibraryScreen>
                                   .toList(),
                               searchQuery: _searchQuery,
                               onBookClick: (book) {
-                                Navigator.push(
-                                  context,
-                                  MaterialPageRoute(
-                                    builder: (context) =>
-                                        BookReaderScreen(book: book),
-                                  ),
-                                );
+                                if (book.format.toUpperCase() == 'PDF') {
+                                  Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (context) =>
+                                          PDFReaderScreen(book: book),
+                                    ),
+                                  );
+                                } else {
+                                  Navigator.of(context).push(
+                                    PageRouteBuilder(
+                                      pageBuilder: (context, animation,
+                                              secondaryAnimation) =>
+                                          EPUBReaderScreen(book: book),
+                                      transitionsBuilder: (context, animation,
+                                          secondaryAnimation, child) {
+                                        return child;
+                                      },
+                                    ),
+                                  );
+                                }
                               },
                               onBookLongPress: (book) =>
                                   _showBookMenu(context, book),
@@ -340,13 +411,27 @@ class _LibraryScreenState extends State<LibraryScreen>
                                   .toList(),
                               searchQuery: _searchQuery,
                               onBookClick: (book) {
-                                Navigator.push(
-                                  context,
-                                  MaterialPageRoute(
-                                    builder: (context) =>
-                                        BookReaderScreen(book: book),
-                                  ),
-                                );
+                                if (book.format.toUpperCase() == 'PDF') {
+                                  Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (context) =>
+                                          PDFReaderScreen(book: book),
+                                    ),
+                                  );
+                                } else {
+                                  Navigator.of(context).push(
+                                    PageRouteBuilder(
+                                      pageBuilder: (context, animation,
+                                              secondaryAnimation) =>
+                                          EPUBReaderScreen(book: book),
+                                      transitionsBuilder: (context, animation,
+                                          secondaryAnimation, child) {
+                                        return child;
+                                      },
+                                    ),
+                                  );
+                                }
                               },
                               onBookLongPress: (book) =>
                                   _showBookMenu(context, book),

@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_gen/gen_l10n/app_localizations.dart';
-import '../../cubit/theme/theme_cubit.dart';
+import '../../bloc/theme/theme_cubit.dart';
 
 class FontSizeSettings extends StatelessWidget {
   const FontSizeSettings({super.key});
