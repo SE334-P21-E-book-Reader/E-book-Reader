@@ -2,23 +2,18 @@
 class Book {
   final String id;
   final String title;
-  final String author;
-  final String? coverUrl;
   final String format; // 'PDF' or 'EPUB'
   final String link; // Firebase Storage link
   final String userId;
-  final int numberOfPage;
-  final int lastReadPage;
+  final String
+      lastReadPage; // Changed to String for EPUB CFI or PDF page number
 
   Book({
     required this.id,
     required this.title,
-    required this.author,
-    this.coverUrl,
     required this.format,
     required this.link,
     required this.userId,
-    required this.numberOfPage,
     required this.lastReadPage,
   });
 
@@ -27,13 +22,10 @@ class Book {
     return Book(
       id: map['id'] as String,
       title: map['title'] as String,
-      author: map['author'] as String,
-      coverUrl: map['coverUrl'] as String?,
       format: map['format'] as String,
       link: map['link'] as String,
       userId: map['userId'] as String,
-      numberOfPage: map['numberOfPage'] as int? ?? 0,
-      lastReadPage: map['lastReadPage'] as int? ?? 0,
+      lastReadPage: map['lastReadPage'] as String? ?? '1',
     );
   }
 
@@ -41,12 +33,31 @@ class Book {
     return {
       'id': id,
       'title': title,
-      'author': author,
-      'coverUrl': coverUrl,
       'format': format,
       'link': link,
       'userId': userId,
-      'numberOfPage': numberOfPage,
+      'lastReadPage': lastReadPage,
+    };
+  }
+
+  // Firestore helpers
+  factory Book.fromFirestore(Map<String, dynamic> map, String docId) {
+    return Book(
+      id: docId,
+      title: map['title'] as String,
+      format: map['format'] as String,
+      link: map['link'] as String,
+      userId: map['userId'] as String,
+      lastReadPage: map['lastReadPage'] as String? ?? '1',
+    );
+  }
+
+  Map<String, dynamic> toFirestore() {
+    return {
+      'title': title,
+      'format': format,
+      'link': link,
+      'userId': userId,
       'lastReadPage': lastReadPage,
     };
   }

@@ -54,8 +54,10 @@ class IconSwitch extends StatelessWidget {
                 decoration: BoxDecoration(
                   color: item.selected
                       ? (item.theme.brightness == Brightness.dark
-                          ? item.theme.colorScheme.primary.withOpacity(0.25)
-                          : item.theme.colorScheme.primary.withOpacity(0.12))
+                          ? item.theme.colorScheme.primary
+                              .withValues(alpha: 0.25)
+                          : item.theme.colorScheme.primary
+                              .withValues(alpha: 0.12))
                       : Colors.transparent,
                   borderRadius: BorderRadius.circular(borderRadius),
                 ),

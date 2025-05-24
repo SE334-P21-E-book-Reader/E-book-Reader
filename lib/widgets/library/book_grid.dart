@@ -1,14 +1,16 @@
-import '../../models/book.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_gen/gen_l10n/app_localizations.dart';
 
-const String kPlaceholderImage = 'https://placehold.jp/80x120.png';
+import '../../models/book.dart';
+
+const String kPdfPlaceholderAsset = 'lib/assets/pdf-placeholder.webp';
+const String kEpubPlaceholderAsset = 'lib/assets/epub-placeholder.webp';
 
 class BookGrid extends StatelessWidget {
   final List<Book> books;
   final String searchQuery;
   final void Function(Book) onBookClick;
-  final void Function(Book) onBookLongPress;
+  final void Function(Book, [String?]) onBookLongPress;
 
   const BookGrid({
     super.key,
@@ -24,8 +26,7 @@ class BookGrid extends StatelessWidget {
     final colorScheme = Theme.of(context).colorScheme;
     final filteredBooks = books.where((book) {
       final query = searchQuery.toLowerCase();
-      return book.title.toLowerCase().contains(query) ||
-          book.author.toLowerCase().contains(query);
+      return book.title.toLowerCase().contains(query);
     }).toList();
 
     if (filteredBooks.isEmpty) {
@@ -55,7 +56,6 @@ class BookGrid extends StatelessWidget {
         final book = filteredBooks[index];
         return GestureDetector(
           onTap: () => onBookClick(book),
-          onLongPress: () => onBookLongPress(book),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
@@ -77,36 +77,37 @@ class BookGrid extends StatelessWidget {
                       ),
                       child: ClipRRect(
                         borderRadius: BorderRadius.circular(8),
-                        child: book.coverUrl != null &&
-                                book.coverUrl!.isNotEmpty
-                            ? Image.network(
-                                book.coverUrl!,
-                                fit: BoxFit.cover,
-                                width: double.infinity,
-                                height: double.infinity,
-                                errorBuilder: (context, error, stackTrace) =>
-                                    Container(
-                                  color: colorScheme.surface,
-                                  width: double.infinity,
-                                  height: double.infinity,
-                                  child: const Icon(Icons.broken_image,
-                                      color: Colors.grey, size: 32),
-                                ),
-                              )
-                            : Image.network(
-                                kPlaceholderImage,
-                                fit: BoxFit.cover,
-                                width: double.infinity,
-                                height: double.infinity,
-                                errorBuilder: (context, error, stackTrace) =>
-                                    Container(
-                                  color: colorScheme.surface,
-                                  width: double.infinity,
-                                  height: double.infinity,
-                                  child: const Icon(Icons.broken_image,
-                                      color: Colors.grey, size: 32),
-                                ),
-                              ),
+                        child: Image.asset(
+                          book.format.toUpperCase() == 'PDF'
+                              ? kPdfPlaceholderAsset
+                              : kEpubPlaceholderAsset,
+                          fit: BoxFit.cover,
+                          width: double.infinity,
+                          height: double.infinity,
+                          errorBuilder: (context, error, stackTrace) =>
+                              Container(
+                            color: colorScheme.surface,
+                            width: double.infinity,
+                            height: double.infinity,
+                            child: const Icon(Icons.broken_image,
+                                color: Colors.grey, size: 32),
+                          ),
+                        ),
+                      ),
+                    ),
+                    Positioned(
+                      top: 0,
+                      right: 0,
+                      child: PopupMenuButton<String>(
+                        icon: const Icon(Icons.more_vert, size: 20),
+                        padding: const EdgeInsets.all(4),
+                        onSelected: (value) => onBookLongPress(book, value),
+                        itemBuilder: (context) => [
+                          const PopupMenuItem(
+                              value: 'edit', child: Text('Rename')),
+                          const PopupMenuItem(
+                              value: 'delete', child: Text('Delete')),
+                        ],
                       ),
                     ),
                     Positioned(
@@ -135,19 +136,15 @@ class BookGrid extends StatelessWidget {
               ),
               const SizedBox(height: 8),
               Text(
-                book.title,
+                (() {
+                  final dotIdx = book.title.lastIndexOf('.');
+                  if (dotIdx > 0) {
+                    return book.title.substring(0, dotIdx);
+                  }
+                  return book.title;
+                })(),
                 style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                     fontWeight: FontWeight.w600, color: colorScheme.onSurface),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                textAlign: TextAlign.center,
-              ),
-              Text(
-                book.author,
-                style: Theme.of(context)
-                    .textTheme
-                    .bodySmall
-                    ?.copyWith(color: colorScheme.secondary),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 textAlign: TextAlign.center,

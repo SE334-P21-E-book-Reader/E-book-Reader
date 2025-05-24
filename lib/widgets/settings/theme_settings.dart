@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_gen/gen_l10n/app_localizations.dart';
+
 import '../../bloc/theme/theme_cubit.dart';
 import '../components/icon_switch.dart';
 
@@ -42,6 +43,7 @@ class ThemeSettings extends StatelessWidget {
   }
 }
 
+
 class _ThemeModeButton extends StatelessWidget {
   final IconData icon;
   final bool selected;
@@ -71,8 +73,8 @@ class _ThemeModeButton extends StatelessWidget {
           decoration: BoxDecoration(
             color: selected
                 ? (theme.brightness == Brightness.dark
-                    ? theme.colorScheme.primary.withOpacity(0.25)
-                    : theme.colorScheme.primary.withOpacity(0.12))
+                    ? theme.colorScheme.primary.withValues(alpha: 0.25)
+                    : theme.colorScheme.primary.withValues(alpha: 0.12))
                 : Colors.transparent,
             borderRadius: BorderRadius.circular(24),
           ),

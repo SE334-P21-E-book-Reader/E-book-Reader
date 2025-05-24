@@ -1,66 +1,46 @@
-import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:equatable/equatable.dart';
-import '../../models/book.dart';
-import 'package:path_provider/path_provider.dart';
-import 'package:firebase_storage/firebase_storage.dart';
 import 'dart:io';
-import 'dart:convert';
-import 'package:uuid/uuid.dart';
+
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:equatable/equatable.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_storage/firebase_storage.dart';
+import 'package:flutter/foundation.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:path_provider/path_provider.dart';
+
+import '../../models/book.dart';
+
 part 'book_state.dart';
 
 class BookCubit extends Cubit<BookState> {
-  static const String _booksFile = 'books.json';
-  BookCubit() : super(const BookState());
+  final FirebaseFirestore firestore;
+  final FirebaseStorage storage;
+  final FirebaseAuth auth;
+  BookCubit({
+    required this.firestore,
+    required this.storage,
+    required this.auth,
+  }) : super(const BookState());
 
-  // Load books from local storage
-  Future<void> loadBooks() async {
-    emit(state.copyWith(isLoading: true));
-    try {
-      final appDir = await getApplicationDocumentsDirectory();
-      final booksFile = File('${appDir.path}/$_booksFile');
-      if (await booksFile.exists()) {
-        final content = await booksFile.readAsString();
-        final List<dynamic> jsonList = json.decode(content);
-        final books = jsonList.map((e) => Book.fromMap(e)).toList();
-        emit(state.copyWith(books: books, isLoading: false));
-      } else {
-        emit(state.copyWith(books: [], isLoading: false));
-      }
-    } catch (e) {
-      emit(state.copyWith(isLoading: false, error: e.toString()));
-    }
+  // Listen to books for current user
+  Stream<void> listenToBooks() {
+    final userId = auth.currentUser?.uid;
+    if (userId == null) return const Stream.empty();
+    return firestore
+        .collection('books')
+        .where('userId', isEqualTo: userId)
+        .snapshots()
+        .map((snapshot) {
+      final books = snapshot.docs
+          .map((doc) => Book.fromFirestore(doc.data(), doc.id))
+          .toList();
+      emit(state.copyWith(books: books, isLoading: false));
+    });
   }
 
-  // Save books to local storage
-  Future<void> _saveBooks(List<Book> books) async {
-    final appDir = await getApplicationDocumentsDirectory();
-    final booksFile = File('${appDir.path}/$_booksFile');
-    final jsonList = books.map((b) => b.toMap()).toList();
-    await booksFile.writeAsString(json.encode(jsonList));
-  }
-
-  // Helper to get a unique file path in app data
-  String _getUniqueFilePath(String dir, String fileName) {
-    var base = fileName;
-    var ext = '';
-    if (fileName.contains('.')) {
-      base = fileName.substring(0, fileName.lastIndexOf('.'));
-      ext = fileName.substring(fileName.lastIndexOf('.'));
-    }
-    var count = 1;
-    var uniqueName = fileName;
-    while (File('$dir/$uniqueName').existsSync()) {
-      uniqueName = '$base($count)$ext';
-      count++;
-    }
-    return '$dir/$uniqueName';
-  }
-
-  // Add a book: copy to app data, add to state, upload to Firebase
+  // Add a book: upload to Firebase Storage, create Firestore doc
   Future<void> addBook({
     required File file,
-    required String title,
-    required String author,
     required String format,
     required String userId,
     void Function(String message)? onDuplicate,
@@ -68,119 +48,231 @@ class BookCubit extends Cubit<BookState> {
   }) async {
     emit(state.copyWith(isLoading: true));
     try {
-      // Check for duplicate by file name
       final fileName = customFileName ?? file.path.split('/').last;
-      final isDuplicate = state.books.any((b) => b.title == fileName);
-      if (isDuplicate) {
+      final title = fileName.contains('.')
+          ? fileName.substring(0, fileName.lastIndexOf('.'))
+          : fileName;
+      // Check for duplicate by title in Firestore
+      final dupQuery = await firestore
+          .collection('books')
+          .where('userId', isEqualTo: userId)
+          .where('title', isEqualTo: title)
+          .get();
+      if (dupQuery.docs.isNotEmpty) {
         emit(state.copyWith(isLoading: false));
         if (onDuplicate != null) {
           onDuplicate('Duplicate file: $fileName');
         }
         return;
       }
+      // Create Firestore doc to get bookId
+      final docRef = firestore.collection('books').doc();
+      final bookId = docRef.id;
+      final storageRef = storage.ref().child('$userId/books/$bookId/$fileName');
+      await storageRef.putFile(file);
+      final downloadUrl = await storageRef.getDownloadURL();
       // Copy file to app data
       final appDir = await getApplicationDocumentsDirectory();
-      final localPath = _getUniqueFilePath(appDir.path, fileName);
-      final localFile = await file.copy(localPath);
-      // Create Book object with local link
+      final localPath =
+          '${appDir.path}/${bookId}_$title.${format.toLowerCase()}';
+      final localFile = File(localPath);
+      if (kDebugMode) {
+        print('[BookCubit.addBook] appDir.path: ${appDir.path}');
+      }
+      if (kDebugMode) {
+        print('[BookCubit.addBook] localPath: $localPath');
+      }
+      if (kDebugMode) {
+        print(
+          '[BookCubit.addBook] localFile.parent.path: ${localFile.parent.path}');
+      }
+      if (localFile.parent.path.isEmpty) {
+        throw Exception('Local file parent path is empty. Cannot copy file.');
+      }
+      try {
+        await localFile.parent.create(recursive: true);
+        await file.copy(localPath);
+      } catch (e) {
+        if (e is FileSystemException && e.osError?.errorCode == 30) {
+          emit(state.copyWith(
+              isLoading: false,
+              error: 'Cannot write to app data: Read-only file system.'));
+          return;
+        } else {
+          rethrow;
+        }
+      }
+      // Extract lastReadPage
+      String lastReadPage = '1';
+      if (format.toUpperCase() == 'PDF') {
+        // lastReadPage = '1';
+      } else if (format.toUpperCase() == 'EPUB') {
+        // lastReadPage = 'epub-cfi';
+      }
       final book = Book(
-        id: const Uuid().v4(),
-        title: fileName,
-        author: author,
-        coverUrl: '',
+        id: bookId,
+        title: title,
         format: format,
-        link: localFile.path, // local path for reading
+        link: downloadUrl,
         userId: userId,
-        numberOfPage: 0, // TODO: parse number of pages
-        lastReadPage: 1,
+        lastReadPage: lastReadPage,
       );
-      final updatedBooks = List<Book>.from(state.books)..add(book);
-      emit(state.copyWith(books: updatedBooks, isLoading: false));
-      await _saveBooks(updatedBooks);
-      // Upload to Firebase Storage in background
-      _uploadToFirebase(localFile, book, updatedBooks);
+      await docRef.set(book.toFirestore());
+      emit(state.copyWith(isLoading: false));
     } catch (e) {
       emit(state.copyWith(isLoading: false, error: e.toString()));
     }
   }
 
-  // Upload file to Firebase and update book link
-  Future<void> _uploadToFirebase(
-      File localFile, Book book, List<Book> books) async {
+  // Download file if not exists locally
+  Future<File> getOrDownloadBookFile(Book book,
+      {Function(double)? onProgress}) async {
+    final appDir = await getApplicationDocumentsDirectory();
+    final localPath =
+        '${appDir.path}/${book.id}_${book.title}.${book.format.toLowerCase()}';
+    final localFile = File(localPath);
+    if (kDebugMode) {
+      print('[BookCubit.getOrDownloadBookFile] appDir.path: ${appDir.path}');
+    }
+    if (kDebugMode) {
+      print('[BookCubit.getOrDownloadBookFile] localPath: $localPath');
+    }
+    if (kDebugMode) {
+      print(
+        '[BookCubit.getOrDownloadBookFile] localFile.parent.path: ${localFile.parent.path}');
+    }
+    if (localFile.parent.path.isEmpty) {
+      throw Exception('Local file parent path is empty. Cannot download file.');
+    }
     try {
-      final storageRef = FirebaseStorage.instance
-          .ref()
-          .child('books/${book.userId}/${localFile.path.split('/').last}');
-      await storageRef.putFile(localFile);
-      final downloadUrl = await storageRef.getDownloadURL();
-      // Update book with Firebase link
-      final updatedBook = Book(
-        id: book.id,
-        title: book.title,
-        author: book.author,
-        coverUrl: book.coverUrl,
-        format: book.format,
-        link: downloadUrl, // now remote link
-        userId: book.userId,
-        numberOfPage: book.numberOfPage,
-        lastReadPage: book.lastReadPage,
-      );
-      final updatedBooks =
-          books.map((b) => b.id == book.id ? updatedBook : b).toList();
-      emit(state.copyWith(books: updatedBooks));
-      await _saveBooks(updatedBooks);
+      await localFile.parent.create(recursive: true);
     } catch (e) {
-      // Optionally handle upload error
-    }
-  }
-
-  // Delete a book by id and remove its file
-  Future<void> deleteBook(String bookId) async {
-    Book book;
-    try {
-      book = state.books.firstWhere((b) => b.id == bookId);
-    } catch (_) {
-      return;
-    }
-    try {
-      // Remove file from local storage
-      final file = File(book.link);
-      if (await file.exists()) {
-        await file.delete();
+      if (e is FileSystemException && e.osError?.errorCode == 30) {
+        emit(state.copyWith(
+            isLoading: false,
+            error: 'Cannot write to app data: Read-only file system.'));
+        rethrow;
+      } else {
+        rethrow;
       }
-      // Remove from state
-      final updatedBooks = List<Book>.from(state.books)
-        ..removeWhere((b) => b.id == bookId);
-      emit(state.copyWith(books: updatedBooks));
-      await _saveBooks(updatedBooks);
+    }
+    if (await localFile.exists()) {
+      return localFile;
+    }
+    // Download to Downloads directory first
+    final downloadsDir = await getDownloadsDirectory();
+    if (downloadsDir == null) {
+      throw Exception('Unable to get Downloads directory');
+    }
+    final tempDownloadPath =
+        '${downloadsDir.path}/${book.id}_${book.title}.${book.format.toLowerCase()}';
+    final tempDownloadFile = File(tempDownloadPath);
+    if (kDebugMode) {
+      print(
+        '[BookCubit.getOrDownloadBookFile] tempDownloadPath: $tempDownloadPath');
+    }
+    try {
+      final ref = storage.refFromURL(book.link);
+      final downloadTask = ref.writeToFile(tempDownloadFile);
+      downloadTask.snapshotEvents.listen((event) {
+        if (onProgress != null && event.totalBytes > 0) {
+          onProgress(event.bytesTransferred / event.totalBytes);
+        }
+      });
+      await downloadTask;
+      if (kDebugMode) {
+        print('[BookCubit.getOrDownloadBookFile] Downloaded to Downloads folder');
+      }
+      // Now copy to app data
+      await tempDownloadFile.copy(localPath);
+      if (kDebugMode) {
+        print('[BookCubit.getOrDownloadBookFile] Copied to app data');
+      }
+      return localFile;
     } catch (e) {
-      emit(state.copyWith(error: e.toString()));
+      if (kDebugMode) {
+        print('[BookCubit.getOrDownloadBookFile] Download or copy failed: $e');
+      }
+      rethrow;
     }
   }
 
-  // Update a book's title (and optionally author)
-  Future<void> updateBook(
-      {required String bookId,
-      required String newTitle,
-      String? newAuthor}) async {
-    final books = state.books;
-    final idx = books.indexWhere((b) => b.id == bookId);
-    if (idx == -1) return;
-    final oldBook = books[idx];
-    final updatedBook = Book(
-      id: oldBook.id,
-      title: newTitle,
-      author: newAuthor ?? oldBook.author,
-      coverUrl: oldBook.coverUrl,
-      format: oldBook.format,
-      link: oldBook.link,
-      userId: oldBook.userId,
-      numberOfPage: oldBook.numberOfPage,
-      lastReadPage: oldBook.lastReadPage,
-    );
-    final updatedBooks = List<Book>.from(books);
-    updatedBooks[idx] = updatedBook;
-    emit(state.copyWith(books: updatedBooks));
-    await _saveBooks(updatedBooks);
+  // Delete a book (Firestore + Storage)
+  Future<void> deleteBook(Book book) async {
+    final userId = auth.currentUser?.uid;
+    if (userId == null || book.userId != userId) return;
+    emit(state.copyWith(isLoading: true));
+    try {
+      await firestore.collection('books').doc(book.id).delete();
+      final storageRef = storage.ref().child(
+          '$userId/books/${book.id}/${book.title}.${book.format.toLowerCase()}');
+      await storageRef.delete();
+      // Delete local file in app data
+      final appDir = await getApplicationDocumentsDirectory();
+      final localPath =
+          '${appDir.path}/${book.id}_${book.title}.${book.format.toLowerCase()}';
+      final localFile = File(localPath);
+      if (await localFile.exists()) {
+        await localFile.delete();
+      }
+      emit(state.copyWith(isLoading: false));
+    } catch (e) {
+      emit(state.copyWith(isLoading: false, error: e.toString()));
+    }
+  }
+
+  // Update a book's title (Firestore and Firebase Storage)
+  Future<void> updateBook({
+    required Book book,
+    required String newTitle,
+  }) async {
+    final userId = auth.currentUser?.uid;
+    if (userId == null) return;
+    emit(state.copyWith(isLoading: true));
+    try {
+      // Rename file in Firebase Storage
+      final oldFileName = '${book.title}.${book.format.toLowerCase()}';
+      final newFileName = '$newTitle.${book.format.toLowerCase()}';
+      final oldStorageRef =
+          storage.ref().child('$userId/books/${book.id}/$oldFileName');
+      final newStorageRef =
+          storage.ref().child('$userId/books/${book.id}/$newFileName');
+      // Copy file to new name
+      final data = await oldStorageRef.getData();
+      if (data == null) {
+        throw Exception('Failed to download file data for rename');
+      }
+      await newStorageRef.putData(data);
+      final newDownloadUrl = await newStorageRef.getDownloadURL();
+      // Delete old file
+      await oldStorageRef.delete();
+      // Update Firestore document
+      await firestore.collection('books').doc(book.id).update({
+        'title': newTitle,
+        'link': newDownloadUrl,
+      });
+      emit(state.copyWith(isLoading: false));
+    } catch (e) {
+      emit(state.copyWith(isLoading: false, error: e.toString()));
+    }
+  }
+
+  // Update lastReadPage in Firestore
+  Future<void> updateLastReadPage({
+    required String bookId,
+    required String lastReadPage,
+  }) async {
+    final userId = auth.currentUser?.uid;
+    if (userId == null) return;
+    try {
+      await firestore.collection('books').doc(bookId).update({
+        'lastReadPage': lastReadPage,
+      });
+    } catch (e) {
+      // Optionally handle error
+      if (kDebugMode) {
+        print('Failed to update lastReadPage: $e');
+      }
+    }
   }
 }

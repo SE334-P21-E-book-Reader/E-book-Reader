@@ -1,18 +1,61 @@
+import 'dart:convert';
 import 'dart:io';
 
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_epub_viewer/flutter_epub_viewer.dart';
 import 'package:http/http.dart' as http;
 import 'package:path_provider/path_provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
+import '../bloc/book/book_cubit.dart';
+import '../bloc/bookmark/bookmark_cubit.dart';
+import '../bloc/bookmark/bookmark_state.dart';
 import '../bloc/theme/theme_cubit.dart';
 import '../models/book.dart';
+import '../models/bookmark.dart';
+import '../widgets/bookmark/bookmark_card.dart';
 
 class EPUBReaderScreen extends StatefulWidget {
   final Book book;
-  const EPUBReaderScreen({Key? key, required this.book}) : super(key: key);
+  final Future<void> Function(String bookId, String lastReadPage)?
+      onSaveLastProgress;
+  final String? initialCfi;
+  final bool skipResumeDialog;
+  final String? openBookmarkCfi;
+  const EPUBReaderScreen(
+      {Key? key,
+      required this.book,
+      this.onSaveLastProgress,
+      this.initialCfi,
+      this.skipResumeDialog = false,
+      this.openBookmarkCfi})
+      : super(key: key);
+
+  static Widget withBookCubit({
+    required BuildContext context,
+    required Book book,
+    Future<void> Function(String bookId, String lastReadPage)?
+        onSaveLastProgress,
+    String? initialCfi,
+    bool skipResumeDialog = false,
+    String? openBookmarkCfi,
+  }) {
+    final cubit = BlocProvider.of<BookCubit>(context);
+    return BlocProvider.value(
+      value: cubit,
+      child: EPUBReaderScreen(
+        book: book,
+        onSaveLastProgress: onSaveLastProgress,
+        initialCfi: initialCfi,
+        skipResumeDialog: skipResumeDialog,
+        openBookmarkCfi: openBookmarkCfi,
+      ),
+    );
+  }
 
   @override
   State<EPUBReaderScreen> createState() => _EPUBReaderScreenState();
@@ -28,7 +71,6 @@ class _EPUBReaderScreenState extends State<EPUBReaderScreen> {
   List<EpubChapter> _chapters = [];
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
   double _progress = 0.0;
-  bool _showSearchBar = false;
   final TextEditingController _searchController = TextEditingController();
   final FocusNode _searchFocus = FocusNode();
   List<EpubSearchResult> _searchResults = [];
@@ -38,14 +80,22 @@ class _EPUBReaderScreenState extends State<EPUBReaderScreen> {
   bool _showFontSizeSlider = false;
   double _fontSize = 16.0;
   String? _selectedCfi;
-  bool _menuExpanded = false;
   EpubDisplaySettings? _epubDisplaySettings;
   EpubTheme _epubTheme = EpubTheme.light();
+  String? _pendingInitialCfi;
+  bool _hasJumpedToInitialCfi = false;
 
   @override
   void initState() {
     super.initState();
     _prepareEpub();
+    if (widget.openBookmarkCfi != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) async {
+        await Future.delayed(const Duration(milliseconds: 400));
+        if (!mounted) return;
+        _openBookmarkSheetAndJump(widget.openBookmarkCfi!);
+      });
+    }
     _searchController.addListener(() async {
       setState(() {
         _searchResults.clear();
@@ -59,10 +109,41 @@ class _EPUBReaderScreenState extends State<EPUBReaderScreen> {
     _epubDisplaySettings = EpubDisplaySettings(
       flow: _currentFlow,
       snap: false,
-      spread: EpubSpread.auto,
+      // spread: EpubSpread.auto,
       allowScriptedContent: true,
+      useSnapAnimationAndroid: false,
       theme: _epubTheme,
     );
+    // If initialCfi is provided, jump to it after loading and override lastReadPage
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      if (widget.initialCfi != null && _epubController != null) {
+        _pendingInitialCfi = widget.initialCfi;
+        _hasJumpedToInitialCfi = false;
+        if (kDebugMode) {
+          print('DEBUG: Jumping to initial CFI: ${widget.initialCfi}');
+        }
+        await _epubController?.display(cfi: widget.initialCfi!);
+        // Override lastReadPage with this CFI
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setString(
+            'epub_last_cfi_${widget.book.id}', widget.initialCfi!);
+        if (widget.onSaveLastProgress != null) {
+          await widget.onSaveLastProgress!(widget.book.id, widget.initialCfi!);
+        }
+        // Extract startCfi if initialCfi is a JSON string
+        String cfiString = widget.initialCfi!;
+        try {
+          final decoded = jsonDecode(widget.initialCfi!);
+          if (decoded is Map && decoded['startCfi'] is String) {
+            cfiString = decoded['startCfi'];
+          }
+        } catch (_) {}
+        // Also update Firestore lastReadPage with the CFI string only
+        final cubit = context.read<BookCubit>();
+        await cubit.updateLastReadPage(
+            bookId: widget.book.id, lastReadPage: cfiString);
+      }
+    });
   }
 
   @override
@@ -71,6 +152,85 @@ class _EPUBReaderScreenState extends State<EPUBReaderScreen> {
     _searchController.dispose();
     _searchFocus.dispose();
     super.dispose();
+  }
+
+  // Save the CFI string to SharedPreferences and Firestore
+  Future<void> _saveLastProgress(String cfi) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('epub_last_cfi_${widget.book.id}', cfi);
+    if (kDebugMode) {
+      print('DEBUG: Saved EPUB last CFI: $cfi');
+    }
+    // Extract startCfi if cfi is a JSON string
+    String cfiString = cfi;
+    try {
+      final decoded = jsonDecode(cfi);
+      if (decoded is Map && decoded['startCfi'] is String) {
+        cfiString = decoded['startCfi'];
+      }
+    } catch (_) {}
+    if (widget.onSaveLastProgress != null) {
+      await widget.onSaveLastProgress!(widget.book.id, cfi);
+    }
+    // Also update Firestore lastReadPage with the CFI string only
+    final cubit = context.read<BookCubit>();
+    await cubit.updateLastReadPage(
+        bookId: widget.book.id, lastReadPage: cfiString);
+  }
+
+  Future<String?> _getLastCfi() async {
+    final prefs = await SharedPreferences.getInstance();
+    final cache = prefs.getString('epub_last_cfi_${widget.book.id}');
+    if (cache != null && cache.isNotEmpty) return cache;
+    // Fallback to Firestore value from Book model
+    final firestoreValue = widget.book.lastReadPage;
+    if (firestoreValue.isNotEmpty) return firestoreValue;
+    return null;
+  }
+
+  Future<void> _checkAndPromptResumeProgress() async {
+    final lastCfi = await _getLastCfi();
+    if (lastCfi != null && lastCfi.isNotEmpty) {
+      if (!mounted) return;
+      if (widget.skipResumeDialog) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (kDebugMode) {
+            print('DEBUG: Resuming EPUB at CFI: $lastCfi (skip dialog)');
+          }
+          _epubController?.display(cfi: lastCfi);
+        });
+        return;
+      }
+      final shouldResume = await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('Resume Reading?'),
+          content: const Text('Resume reading from your last position?'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: const Text('Start at Beginning'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(true),
+              child: const Text('Resume'),
+            ),
+          ],
+        ),
+      );
+      if (shouldResume == true) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (kDebugMode) {
+            print('DEBUG: Resuming EPUB at CFI: $lastCfi');
+          }
+          _epubController?.display(cfi: lastCfi);
+        });
+      } else {
+        // Optionally clear the saved CFI
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.remove('epub_last_cfi_${widget.book.id}');
+      }
+    }
   }
 
   Future<void> _prepareEpub() async {
@@ -108,6 +268,10 @@ class _EPUBReaderScreenState extends State<EPUBReaderScreen> {
         _epubController = EpubController();
         _loading = false;
       });
+      // Only check for last progress if not opening from a bookmark
+      if (!widget.skipResumeDialog && widget.initialCfi == null) {
+        await _checkAndPromptResumeProgress();
+      }
     } catch (e) {
       if (_disposed) return;
       setState(() {
@@ -120,7 +284,7 @@ class _EPUBReaderScreenState extends State<EPUBReaderScreen> {
   // Helper to get chapter title for a given cfi
   String? _getChapterTitleForCfi(String cfi) {
     for (final chapter in _chapters) {
-      if (chapter.href != null && cfi.contains(chapter.href!)) {
+      if (cfi.contains(chapter.href)) {
         return chapter.title;
       }
     }
@@ -141,7 +305,7 @@ class _EPUBReaderScreenState extends State<EPUBReaderScreen> {
       }
       spans.add(TextSpan(
         text: excerpt.substring(match.start, match.end),
-        style: TextStyle(
+        style: const TextStyle(
           backgroundColor: Colors.yellow,
           fontWeight: FontWeight.bold,
         ),
@@ -152,7 +316,8 @@ class _EPUBReaderScreenState extends State<EPUBReaderScreen> {
       spans.add(TextSpan(text: excerpt.substring(last)));
     }
     return RichText(
-        text: TextSpan(style: TextStyle(color: Colors.black), children: spans));
+        text: TextSpan(
+            style: const TextStyle(color: Colors.black), children: spans));
   }
 
   List<ContextMenuItem> get _menuItems {
@@ -215,10 +380,154 @@ class _EPUBReaderScreenState extends State<EPUBReaderScreen> {
         snap: false,
         spread: EpubSpread.auto,
         allowScriptedContent: true,
+        useSnapAnimationAndroid: false,
         theme: _epubTheme,
       );
     });
     _epubController?.updateTheme(theme: _epubTheme);
+  }
+
+  void _openBookmarkSheetAndJump(String cfi) async {
+    // Open the bookmark bottom sheet and jump to the given CFI
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (context) => Builder(
+        builder: (modalContext) {
+          return DraggableScrollableSheet(
+            expand: false,
+            initialChildSize: 0.3,
+            minChildSize: 0.1,
+            maxChildSize: 0.9,
+            builder: (context, scrollController) {
+              return BlocBuilder<BookmarkCubit, BookmarkState>(
+                builder: (context, state) {
+                  final cubit = context.read<BookmarkCubit>();
+                  if (!state.isLoading) {
+                    cubit.loadBookmarks(widget.book.id);
+                  }
+                  final bookBookmarks = (state.bookmarks)
+                      .where((b) => b.bookId == widget.book.id)
+                      .toList();
+                  return Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Padding(
+                        padding: const EdgeInsets.all(16.0),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Expanded(
+                              child: Text(
+                                'Bookmarks for "${widget.book.title}"',
+                                style: Theme.of(context).textTheme.titleLarge,
+                                maxLines: 2,
+                                softWrap: true,
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            ElevatedButton.icon(
+                              icon: const Icon(Icons.add, size: 18),
+                              label: const Text('Add',
+                                  softWrap: true, maxLines: 1),
+                              style: ElevatedButton.styleFrom(
+                                  minimumSize: const Size(60, 36),
+                                  padding: const EdgeInsets.symmetric(horizontal: 8)),
+                              onPressed: () async {
+                                if (_epubController == null) return;
+                                final location =
+                                    await _epubController!.getCurrentLocation();
+                                final locationJson = jsonEncode(location);
+                                if (locationJson.isEmpty) return;
+                                final newBookmark = Bookmark(
+                                  bookId: widget.book.id,
+                                  bookTitle: widget.book.title,
+                                  location: locationJson,
+                                );
+                                await cubit.addBookmark(newBookmark);
+                                await cubit.loadBookmarks(widget.book.id);
+                                if (mounted) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    const SnackBar(
+                                        content: Text('Bookmark added')),
+                                  );
+                                }
+                              },
+                            ),
+                          ],
+                        ),
+                      ),
+                      Expanded(
+                        child: bookBookmarks.isEmpty
+                            ? const Center(child: Text('No bookmarks yet.'))
+                            : ListView.builder(
+                                controller: scrollController,
+                                padding:
+                                    const EdgeInsets.symmetric(horizontal: 12),
+                                itemCount: bookBookmarks.length,
+                                itemBuilder: (context, idx) {
+                                  final bookmark = bookBookmarks[idx];
+                                  return BookmarkCard(
+                                    bookmark: bookmark,
+                                    compact: true,
+                                    onTap: () async {
+                                      Navigator.pop(context);
+                                      String? cfi;
+                                      try {
+                                        final decoded =
+                                            jsonDecode(bookmark.location);
+                                        cfi = decoded['startCfi'] as String?;
+                                      } catch (e) {
+                                        cfi = null;
+                                      }
+                                      if (cfi != null && cfi.isNotEmpty) {
+                                        await _epubController?.display(
+                                            cfi: cfi);
+                                      } else {
+                                        if (context.mounted) {
+                                          ScaffoldMessenger.of(context)
+                                              .showSnackBar(
+                                            const SnackBar(
+                                                content: Text(
+                                                    'Bookmark location is invalid or missing.')),
+                                          );
+                                        }
+                                      }
+                                    },
+                                    onDelete: () async {
+                                      await cubit.deleteBookmark(bookmark);
+                                      await cubit.loadBookmarks(widget.book.id);
+                                      if (mounted) {
+                                        Navigator.pop(context);
+                                        ScaffoldMessenger.of(context)
+                                            .showSnackBar(
+                                          const SnackBar(
+                                              content:
+                                                  Text('Bookmark deleted')),
+                                        );
+                                      }
+                                    },
+                                  );
+                                },
+                              ),
+                      ),
+                    ],
+                  );
+                },
+              );
+            },
+          );
+        },
+      ),
+    );
+    // After opening, jump to the given CFI
+    if (_epubController != null && cfi.isNotEmpty) {
+      await Future.delayed(const Duration(milliseconds: 200));
+      await _epubController!.display(cfi: cfi);
+    }
   }
 
   @override
@@ -234,7 +543,209 @@ class _EPUBReaderScreenState extends State<EPUBReaderScreen> {
           },
         ),
         actions: [
-          // Theme switch button
+          IconButton(
+            icon: const Icon(Icons.search),
+            tooltip: 'Search',
+            onPressed: () {
+              _scaffoldKey.currentState?.openDrawer();
+            },
+          ),
+          IconButton(
+            icon: const Icon(Icons.format_size),
+            tooltip: 'Font Size',
+            onPressed: () {
+              setState(() {
+                _showFontSizeSlider = !_showFontSizeSlider;
+              });
+            },
+            onLongPress: () {
+              setState(() {
+                _fontSize = 16.0;
+              });
+              _epubController?.setFontSize(fontSize: 16.0);
+            },
+          ),
+          IconButton(
+            icon: const Icon(Icons.bookmark_border),
+            tooltip: 'Bookmark',
+            onPressed: () async {
+              final user = FirebaseAuth.instance.currentUser;
+              if (user == null) return;
+              final cubit = context.read<BookmarkCubit>();
+              await cubit.loadBookmarks(widget.book.id);
+              cubit.state.bookmarks
+                  .where((b) => b.bookId == widget.book.id)
+                  .toList();
+              if (!mounted) return;
+              showModalBottomSheet(
+                context: context,
+                isScrollControlled: true,
+                shape: const RoundedRectangleBorder(
+                  borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+                ),
+                builder: (context) => Builder(
+                  builder: (modalContext) {
+                    return DraggableScrollableSheet(
+                      expand: false,
+                      initialChildSize: 0.3,
+                      minChildSize: 0.1,
+                      maxChildSize: 0.9,
+                      builder: (context, scrollController) {
+                        return BlocBuilder<BookmarkCubit, BookmarkState>(
+                          builder: (context, state) {
+                            final cubit = context.read<BookmarkCubit>();
+                            if (!state.isLoading) {
+                              cubit.loadBookmarks(widget.book.id);
+                            }
+                            final bookBookmarks = (state.bookmarks)
+                                .where((b) => b.bookId == widget.book.id)
+                                .toList();
+                            return Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Padding(
+                                  padding: const EdgeInsets.all(16.0),
+                                  child: Row(
+                                    mainAxisAlignment:
+                                        MainAxisAlignment.spaceBetween,
+                                    children: [
+                                      Expanded(
+                                        child: Text(
+                                          'Bookmarks for "${widget.book.title}"',
+                                          style: Theme.of(context)
+                                              .textTheme
+                                              .titleLarge,
+                                          maxLines: 2,
+                                          softWrap: true,
+                                        ),
+                                      ),
+                                      const SizedBox(width: 8),
+                                      ElevatedButton.icon(
+                                        icon: const Icon(Icons.add, size: 18),
+                                        label: const Text('Add',
+                                            softWrap: true, maxLines: 1),
+                                        style: ElevatedButton.styleFrom(
+                                            minimumSize: const Size(60, 36),
+                                            padding: const EdgeInsets.symmetric(
+                                                horizontal: 8)),
+                                        onPressed: () async {
+                                          if (_epubController == null) return;
+                                          final location =
+                                              await _epubController!
+                                                  .getCurrentLocation();
+                                          final locationJson =
+                                              jsonEncode(location);
+                                          if (locationJson.isEmpty) return;
+                                          final newBookmark = Bookmark(
+                                            bookId: widget.book.id,
+                                            bookTitle: widget.book.title,
+                                            location: locationJson,
+                                          );
+                                          await cubit.addBookmark(newBookmark);
+                                          await cubit
+                                              .loadBookmarks(widget.book.id);
+                                          if (mounted) {
+                                            ScaffoldMessenger.of(context)
+                                                .showSnackBar(
+                                              const SnackBar(
+                                                  content:
+                                                      Text('Bookmark added')),
+                                            );
+                                          }
+                                        },
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                Expanded(
+                                  child: bookBookmarks.isEmpty
+                                      ? const Center(
+                                          child: Text('No bookmarks yet.'))
+                                      : ListView.builder(
+                                          controller: scrollController,
+                                          padding: const EdgeInsets.symmetric(
+                                              horizontal: 12),
+                                          itemCount: bookBookmarks.length,
+                                          itemBuilder: (context, idx) {
+                                            final bookmark = bookBookmarks[idx];
+                                            return BookmarkCard(
+                                              bookmark: bookmark,
+                                              compact: true,
+                                              onTap: () async {
+                                                Navigator.pop(context);
+                                                String? cfi;
+                                                try {
+                                                  final decoded = jsonDecode(
+                                                      bookmark.location);
+                                                  cfi = decoded['startCfi']
+                                                      as String?;
+                                                } catch (e) {
+                                                  cfi = null;
+                                                }
+                                                if (cfi != null &&
+                                                    cfi.isNotEmpty) {
+                                                  await _epubController
+                                                      ?.display(cfi: cfi);
+                                                } else {
+                                                  if (context.mounted) {
+                                                    ScaffoldMessenger.of(
+                                                            context)
+                                                        .showSnackBar(
+                                                      const SnackBar(
+                                                          content: Text(
+                                                              'Bookmark location is invalid or missing.')),
+                                                    );
+                                                  }
+                                                }
+                                              },
+                                              onDelete: () async {
+                                                await cubit
+                                                    .deleteBookmark(bookmark);
+                                                await cubit.loadBookmarks(
+                                                    widget.book.id);
+                                                if (mounted) {
+                                                  Navigator.pop(context);
+                                                  ScaffoldMessenger.of(context)
+                                                      .showSnackBar(
+                                                    const SnackBar(
+                                                        content: Text(
+                                                            'Bookmark deleted')),
+                                                  );
+                                                }
+                                              },
+                                            );
+                                          },
+                                        ),
+                                ),
+                              ],
+                            );
+                          },
+                        );
+                      },
+                    );
+                  },
+                ),
+              );
+            },
+            onLongPress: () async {
+              if (_epubController == null) return;
+              final location = await _epubController!.getCurrentLocation();
+              final locationJson = jsonEncode(location);
+              if (locationJson.isEmpty) return;
+              final newBookmark = Bookmark(
+                bookId: widget.book.id,
+                bookTitle: widget.book.title,
+                location: locationJson,
+              );
+              final cubit = context.read<BookmarkCubit>();
+              await cubit.addBookmark(newBookmark);
+              if (mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Bookmark added')),
+                );
+              }
+            },
+          ),
           Builder(
             builder: (context) {
               final themeState = context.watch<ThemeCubit>().state;
@@ -257,50 +768,15 @@ class _EPUBReaderScreenState extends State<EPUBReaderScreen> {
             },
           ),
           IconButton(
-            icon: const Icon(Icons.bookmark_border),
-            tooltip: 'Bookmark',
-            onPressed: () {
-              showModalBottomSheet(
-                context: context,
-                builder: (context) => SizedBox(
-                  height: 200,
-                  child: Center(child: Text('Bookmark bottom sheet (empty)')),
-                ),
-              );
-            },
-          ),
-          IconButton(
-            icon: const Icon(Icons.format_size),
-            tooltip: 'Font Size',
-            onPressed: () {
-              setState(() {
-                _showFontSizeSlider = !_showFontSizeSlider;
-              });
-            },
-            onLongPress: () {
-              setState(() {
-                _fontSize = 16.0;
-              });
-              _epubController?.setFontSize(fontSize: 16.0);
-            },
-          ),
-          IconButton(
             icon: const Icon(Icons.menu_book),
             tooltip: 'Table of Contents',
-            onPressed: () {
-              _scaffoldKey.currentState?.openDrawer();
-            },
-          ),
-          IconButton(
-            icon: const Icon(Icons.search),
-            tooltip: 'Search',
             onPressed: () {
               _scaffoldKey.currentState?.openEndDrawer();
             },
           ),
         ],
       ),
-      drawer: Drawer(
+      endDrawer: Drawer(
         child: SafeArea(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -319,7 +795,7 @@ class _EPUBReaderScreenState extends State<EPUBReaderScreen> {
                         itemBuilder: (context, idx) {
                           final chapter = _chapters[idx];
                           return ListTile(
-                            title: Text(chapter.title ?? 'Untitled'),
+                            title: Text(chapter.title),
                             onTap: () {
                               Navigator.of(context).maybePop();
                               _epubController?.display(cfi: chapter.href);
@@ -332,7 +808,7 @@ class _EPUBReaderScreenState extends State<EPUBReaderScreen> {
           ),
         ),
       ),
-      endDrawer: Drawer(
+      drawer: Drawer(
         child: SafeArea(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -378,15 +854,15 @@ class _EPUBReaderScreenState extends State<EPUBReaderScreen> {
                         },
                         decoration: InputDecoration(
                           hintText: 'Search...',
-                          border: OutlineInputBorder(),
+                          border: const OutlineInputBorder(),
                           isDense: true,
-                          contentPadding:
-                              EdgeInsets.symmetric(vertical: 8, horizontal: 12),
+                          contentPadding: const EdgeInsets.symmetric(
+                              vertical: 8, horizontal: 12),
                           suffixIcon: _searchController.text.isNotEmpty ||
                                   _searchResults.isNotEmpty ||
                                   _searchError.isNotEmpty
                               ? IconButton(
-                                  icon: Icon(Icons.clear),
+                                  icon: const Icon(Icons.clear),
                                   onPressed: () {
                                     setState(() {
                                       _searchController.clear();
@@ -400,8 +876,8 @@ class _EPUBReaderScreenState extends State<EPUBReaderScreen> {
                       ),
                     ),
                     if (_searching)
-                      Padding(
-                        padding: const EdgeInsets.only(left: 8.0),
+                      const Padding(
+                        padding: EdgeInsets.only(left: 8.0),
                         child: SizedBox(
                           width: 20,
                           height: 20,
@@ -415,14 +891,14 @@ class _EPUBReaderScreenState extends State<EPUBReaderScreen> {
                 Expanded(
                   child: ListView.separated(
                     itemCount: _searchResults.length,
-                    separatorBuilder: (context, idx) => Divider(),
+                    separatorBuilder: (context, idx) => const Divider(),
                     itemBuilder: (context, idx) {
                       final result = _searchResults[idx];
-                      final chapterTitle =
-                          _getChapterTitleForCfi(result.cfi ?? '');
+                      final chapterTitle = _getChapterTitleForCfi(result.cfi);
                       return ListTile(
                         title: _highlightedExcerpt(
-                            result.excerpt ?? '', _searchController.text),
+                            result.excerpt, _searchController.text),
+                        subtitle: Text(chapterTitle ?? ''),
                         onTap: () async {
                           Navigator.of(context).maybePop();
                           if (_lastHighlightedCfi != null) {
@@ -430,9 +906,9 @@ class _EPUBReaderScreenState extends State<EPUBReaderScreen> {
                                 cfi: _lastHighlightedCfi!);
                           }
                           await _epubController?.display(cfi: result.cfi);
-                          if (result.cfi != null && result.cfi!.isNotEmpty) {
+                          if (result.cfi.isNotEmpty) {
                             await _epubController?.addHighlight(
-                              cfi: result.cfi!,
+                              cfi: result.cfi,
                               color: Colors.yellow,
                               opacity: 0.5,
                             );
@@ -447,8 +923,8 @@ class _EPUBReaderScreenState extends State<EPUBReaderScreen> {
                 Padding(
                   padding: const EdgeInsets.symmetric(
                       vertical: 8.0, horizontal: 16.0),
-                  child:
-                      Text(_searchError, style: TextStyle(color: Colors.red)),
+                  child: Text(_searchError,
+                      style: const TextStyle(color: Colors.red)),
                 ),
             ],
           ),
@@ -482,12 +958,6 @@ class _EPUBReaderScreenState extends State<EPUBReaderScreen> {
                                         SafeArea(
                                           child: Builder(
                                             builder: (context) {
-                                              final themeState = context
-                                                  .watch<ThemeCubit>()
-                                                  .state;
-                                              final isDark =
-                                                  themeState.themeMode ==
-                                                      ThemeMode.dark;
                                               return EpubViewer(
                                                 key: ValueKey(_currentFlow),
                                                 epubSource: EpubSource.fromFile(
@@ -505,23 +975,51 @@ class _EPUBReaderScreenState extends State<EPUBReaderScreen> {
                                                 },
                                                 onEpubLoaded: () async {
                                                   final chapters =
-                                                      await _epubController
+                                                      _epubController
                                                           ?.getChapters();
-                                                  print(
-                                                      chapters); // Inspect for cfi or other properties
+                                                  if (kDebugMode) {
+                                                    print(chapters);
+                                                  } // Inspect for cfi or other properties
                                                 },
                                                 onRelocated: (value) async {
-                                                  // Update progress
-                                                  final progress =
+                                                  final location =
                                                       await _epubController
                                                           ?.getCurrentLocation();
-                                                  if (progress != null &&
+                                                  if (location != null &&
                                                       mounted) {
-                                                    setState(() {
-                                                      _progress =
-                                                          progress.progress ??
-                                                              0.0;
-                                                    });
+                                                    final cfi =
+                                                        location.startCfi;
+                                                    if (kDebugMode) {
+                                                      print(
+                                                          'DEBUG: onRelocated CFI: $cfi');
+                                                    }
+                                                    // If opening from a bookmark, ignore ALL relocations until we reach the intended CFI
+                                                    if (_pendingInitialCfi !=
+                                                        null) {
+                                                      if (cfi ==
+                                                          _pendingInitialCfi) {
+                                                        _pendingInitialCfi =
+                                                            null;
+                                                        _hasJumpedToInitialCfi =
+                                                            true;
+                                                      } else {
+                                                        // Ignore ALL relocation events until we reach the intended CFI
+                                                        return;
+                                                      }
+                                                    }
+                                                    // Only save progress after we've jumped to the intended CFI (or if not opening from bookmark)
+                                                    if (_hasJumpedToInitialCfi ||
+                                                        widget.initialCfi ==
+                                                            null) {
+                                                      if (cfi.isNotEmpty) {
+                                                        await _saveLastProgress(
+                                                            cfi);
+                                                      }
+                                                      setState(() {
+                                                        _progress =
+                                                            location.progress;
+                                                      });
+                                                    }
                                                   }
                                                 },
                                                 onTextSelected:

@@ -1,8 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_gen/gen_l10n/app_localizations.dart';
+
+import '../bloc/user/user_cubit.dart';
+import '../bloc/user/user_state.dart';
 import '../widgets/settings/font_size_settings.dart';
-import '../widgets/settings/theme_settings.dart';
 import '../widgets/settings/language_settings.dart';
+import '../widgets/settings/theme_settings.dart';
 import '../widgets/settings/user_account.dart';
 
 class SettingsScreen extends StatefulWidget {
@@ -160,9 +164,20 @@ class _SettingsScreenState extends State<SettingsScreen>
                           ),
                         ),
                         // Account Tab
-                        const SingleChildScrollView(
-                          padding: EdgeInsets.all(16.0),
-                          child: UserAccount(),
+                        BlocProvider(
+                          create: (_) => UserCubit()..fetchUser(),
+                          child: BlocListener<UserCubit, UserState>(
+                            listener: (context, state) {
+                              if (state is UserLoggedOut || state.isLoggedOut) {
+                                Navigator.pushNamedAndRemoveUntil(
+                                    context, '/sign-in', (route) => false);
+                              }
+                            },
+                            child: const SingleChildScrollView(
+                              padding: EdgeInsets.all(16.0),
+                              child: UserAccount(),
+                            ),
+                          ),
                         ),
                       ],
                     ),

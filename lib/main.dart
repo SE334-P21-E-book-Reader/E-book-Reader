@@ -1,16 +1,32 @@
-import 'package:flutter/material.dart';
-import 'package:flutter_localizations/flutter_localizations.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:ebook_reader/screens/signup_screen.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_storage/firebase_storage.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_gen/gen_l10n/app_localizations.dart';
-import 'screens/settings_screen.dart';
-import 'widgets/navigation/bottom_nav.dart';
-import 'bloc/theme/theme_cubit.dart';
-import 'bloc/language/language_cubit.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'screens/library_screen.dart';
-import 'screens/bookmarks_screen.dart';
+
+import 'bloc/auth/forget-password/forget_password_cubit.dart';
+import 'bloc/auth/sign-in/signin_cubit.dart';
+import 'bloc/auth/sign-up/signup_cubit.dart';
 import 'bloc/book/book_cubit.dart';
+import 'bloc/bookmark/bookmark_cubit.dart';
+import 'bloc/language/language_cubit.dart';
+import 'bloc/reader/pdf/pdf_reader_cubit.dart';
+import 'bloc/theme/theme_cubit.dart';
+import 'bloc/user/user_cubit.dart';
+import 'models/book.dart';
+import 'screens/bookmarks_screen.dart';
+import 'screens/epub_reader_screen.dart';
+import 'screens/forget_password_screen.dart';
+import 'screens/library_screen.dart';
+import 'screens/pdf_reader_screen.dart';
+import 'screens/settings_screen.dart';
+import 'screens/signin_screen.dart';
+import 'widgets/navigation/bottom_nav.dart';
 
 void main() async {
   // Đảm bảo Flutter được khởi tạo
@@ -18,12 +34,23 @@ void main() async {
 
   // Khởi tạo Firebase
   await Firebase.initializeApp();
+  // await FirebaseFirestore.instance.collection('test').add({'test': 'value'});
 
   runApp(
     MultiBlocProvider(
       providers: [
         BlocProvider(create: (_) => ThemeCubit()),
         BlocProvider(create: (_) => LanguageCubit()),
+        BlocProvider(create: (_) => UserCubit()),
+        BlocProvider(create: (_) => BookmarkCubit()),
+        BlocProvider(create: (_) => PdfReaderCubit()),
+        BlocProvider(
+          create: (_) => BookCubit(
+            firestore: FirebaseFirestore.instance,
+            storage: FirebaseStorage.instance,
+            auth: FirebaseAuth.instance,
+          ),
+        ),
       ],
       child: const MyApp(),
     ),
@@ -105,10 +132,107 @@ class MyApp extends StatelessWidget {
                 Locale('en'), // English
                 Locale('vi'), // Vietnamese
               ],
-              home: const MainScreen(),
+              home: const AuthGate(),
+              routes: {
+                '/forgot-password': (context) => BlocProvider(
+                      create: (_) => ForgetPasswordCubit(),
+                      child: ForgotPasswordScreen(
+                        toggleTheme: () =>
+                            context.read<ThemeCubit>().toggleTheme(),
+                      ),
+                    ),
+                '/sign-up': (context) => BlocProvider(
+                      create: (_) => SignupCubit(),
+                      child: SignUpScreen(
+                        toggleTheme: () =>
+                            context.read<ThemeCubit>().toggleTheme(),
+                      ),
+                    ),
+                '/sign-in': (context) => MultiBlocProvider(
+                      providers: [
+                        BlocProvider.value(value: context.read<UserCubit>()),
+                        BlocProvider(create: (_) => SigninCubit()),
+                      ],
+                      child: SignInScreen(
+                        toggleTheme: () =>
+                            context.read<ThemeCubit>().toggleTheme(),
+                      ),
+                    ),
+                '/main': (context) => const MainScreen(),
+                '/pdf_reader': (context) {
+                  final args = ModalRoute.of(context)!.settings.arguments
+                      as Map<String, dynamic>;
+                  final book = Book(
+                    id: args['bookId'] as String,
+                    title: args['bookTitle'] as String? ?? '',
+                    format: 'PDF',
+                    link: '',
+                    userId: FirebaseAuth.instance.currentUser?.uid ?? '',
+                    lastReadPage: (args['initialPage']?.toString() ?? '1'),
+                  );
+                  final cubit = BlocProvider.of<BookCubit>(context);
+                  return BlocProvider.value(
+                    value: cubit,
+                    child: PDFReaderScreen(
+                      book: book,
+                      initialPage: args['initialPage'] as int?,
+                    ),
+                  );
+                },
+                '/epub_reader': (context) {
+                  final args = ModalRoute.of(context)!.settings.arguments
+                      as Map<String, dynamic>;
+                  final book = Book(
+                    id: args['bookId'] as String,
+                    title: args['bookTitle'] as String? ?? '',
+                    format: 'EPUB',
+                    link: '',
+                    userId: FirebaseAuth.instance.currentUser?.uid ?? '',
+                    lastReadPage: '',
+                  );
+                  final cubit = BlocProvider.of<BookCubit>(context);
+                  return BlocProvider.value(
+                    value: cubit,
+                    child: EPUBReaderScreen(
+                      book: book,
+                      initialCfi: args['initialCfi'] as String?,
+                    ),
+                  );
+                },
+              },
             );
           },
         );
+      },
+    );
+  }
+}
+
+class AuthGate extends StatelessWidget {
+  const AuthGate({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<User?>(
+      future: Future.value(FirebaseAuth.instance.currentUser),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Scaffold(
+              body: Center(child: CircularProgressIndicator()));
+        }
+        if (snapshot.data == null) {
+          return MultiBlocProvider(
+            providers: [
+              BlocProvider.value(value: context.read<UserCubit>()),
+              BlocProvider(create: (_) => SigninCubit()),
+            ],
+            child: SignInScreen(
+              toggleTheme: () => context.read<ThemeCubit>().toggleTheme(),
+            ),
+          );
+        } else {
+          return const MainScreen();
+        }
       },
     );
   }
@@ -124,14 +248,17 @@ class MainScreen extends StatefulWidget {
 class _MainScreenState extends State<MainScreen> {
   int _selectedIndex = 0;
 
-  final List<Widget> _screens = [
-    BlocProvider(
-      create: (_) => BookCubit()..loadBooks(),
-      child: const LibraryScreen(),
-    ),
-    const BookmarksScreen(),
-    const SettingsScreen(),
-  ];
+  final List<Widget> _screens = [];
+
+  @override
+  void initState() {
+    super.initState();
+    _screens.addAll([
+      const LibraryScreen(),
+      const BookmarksScreen(),
+      const SettingsScreen(),
+    ]);
+  }
 
   @override
   Widget build(BuildContext context) {
