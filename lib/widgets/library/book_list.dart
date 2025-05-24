@@ -1,11 +1,9 @@
 import 'dart:io';
 
 import 'package:flutter/material.dart';
-import 'package:flutter_gen/gen_l10n/app_localizations.dart';
 
 import '../../models/book.dart';
 
-const String kPlaceholderImage = 'https://placehold.jp/80x120.png';
 const String kPdfPlaceholderAsset = 'lib/assets/pdf-placeholder.webp';
 const String kEpubPlaceholderAsset = 'lib/assets/epub-placeholder.webp';
 
@@ -25,7 +23,6 @@ class BookList extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final l10n = AppLocalizations.of(context)!;
     final colorScheme = Theme.of(context).colorScheme;
     final filteredBooks = books.where((book) {
       final query = searchQuery.toLowerCase();
@@ -37,7 +34,7 @@ class BookList extends StatelessWidget {
         child: Padding(
           padding: const EdgeInsets.symmetric(vertical: 32.0, horizontal: 16.0),
           child: Text(
-            l10n.noBooksFound,
+            'No books found',
             style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                   color: colorScheme.secondary,
                 ),

@@ -5,7 +5,6 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:flutter_gen/gen_l10n/app_localizations.dart';
 
 import '../bloc/book/book_cubit.dart';
 import '../bloc/bookmark/bookmark_cubit.dart';
@@ -139,7 +138,6 @@ class _BookmarksScreenState extends State<BookmarksScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final l10n = AppLocalizations.of(context)!;
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
     final textTheme = theme.textTheme;
@@ -183,7 +181,7 @@ class _BookmarksScreenState extends State<BookmarksScreen> {
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
                         Text(
-                          l10n.bookmarksTitle,
+                          'Bookmarks',
                           style: theme.textTheme.titleLarge?.copyWith(
                             color: theme.colorScheme.onSurface,
                             fontWeight: FontWeight.bold,
@@ -193,7 +191,7 @@ class _BookmarksScreenState extends State<BookmarksScreen> {
                     ),
                     const SizedBox(height: 20),
                     components.SearchBar(
-                      hintText: l10n.bookmarksSearchHint,
+                      hintText: 'Search bookmarks...',
                       onChanged: (value) =>
                           setState(() => _searchQuery = value),
                       borderColor: colorScheme.secondary,
@@ -212,8 +210,8 @@ class _BookmarksScreenState extends State<BookmarksScreen> {
                       ? Center(
                           child: Text(
                             _searchQuery.isNotEmpty
-                                ? l10n.bookmarksNotFound
-                                : l10n.bookmarksEmpty,
+                                ? 'No bookmarks found'
+                                : 'No bookmarks yet.',
                             style: textTheme.bodyMedium
                                 ?.copyWith(color: colorScheme.secondary),
                             textAlign: TextAlign.center,

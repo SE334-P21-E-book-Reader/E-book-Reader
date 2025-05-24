@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:flutter_gen/gen_l10n/app_localizations.dart';
 
 import '../../bloc/theme/theme_cubit.dart';
 
@@ -10,27 +9,25 @@ class FontSizeSettings extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final themeState = context.watch<ThemeCubit>().state;
-    final l10n = AppLocalizations.of(context)!;
-
     return Column(
       children: [
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
             Text(
-              l10n.small,
+              'Small',
               style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                     color: Theme.of(context).colorScheme.onSurface,
                   ),
             ),
             Text(
-              l10n.medium,
+              'Medium',
               style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                     color: Theme.of(context).colorScheme.onSurface,
                   ),
             ),
             Text(
-              l10n.large,
+              'Large',
               style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                     color: Theme.of(context).colorScheme.onSurface,
                   ),
@@ -42,7 +39,7 @@ class FontSizeSettings extends StatelessWidget {
           min: 0,
           max: 2,
           divisions: 2,
-          label: _getFontSizeLabel(themeState.fontSize, l10n),
+          label: _getFontSizeLabel(themeState.fontSize),
           onChanged: (double value) {
             context.read<ThemeCubit>().setFontSize(value);
           },
@@ -53,16 +50,16 @@ class FontSizeSettings extends StatelessWidget {
     );
   }
 
-  String _getFontSizeLabel(double size, AppLocalizations l10n) {
+  String _getFontSizeLabel(double size) {
     switch (size) {
       case 0:
-        return '${l10n.small} (1x)';
+        return 'Small (1x)';
       case 1:
-        return '${l10n.medium} (1.5x)';
+        return 'Medium (1.5x)';
       case 2:
-        return '${l10n.large} (2x)';
+        return 'Large (2x)';
       default:
-        return '${l10n.medium} (1.5x)';
+        return 'Medium (1.5x)';
     }
   }
 }

@@ -5,7 +5,6 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:flutter_gen/gen_l10n/app_localizations.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:google_fonts/google_fonts.dart';
 
@@ -14,7 +13,6 @@ import 'bloc/auth/sign-in/signin_cubit.dart';
 import 'bloc/auth/sign-up/signup_cubit.dart';
 import 'bloc/book/book_cubit.dart';
 import 'bloc/bookmark/bookmark_cubit.dart';
-import 'bloc/language/language_cubit.dart';
 import 'bloc/reader/pdf/pdf_reader_cubit.dart';
 import 'bloc/theme/theme_cubit.dart';
 import 'bloc/user/user_cubit.dart';
@@ -40,7 +38,6 @@ void main() async {
     MultiBlocProvider(
       providers: [
         BlocProvider(create: (_) => ThemeCubit()),
-        BlocProvider(create: (_) => LanguageCubit()),
         BlocProvider(create: (_) => UserCubit()),
         BlocProvider(create: (_) => BookmarkCubit()),
         BlocProvider(create: (_) => PdfReaderCubit()),
@@ -64,143 +61,134 @@ class MyApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return BlocBuilder<ThemeCubit, ThemeState>(
       builder: (context, themeState) {
-        return BlocBuilder<LanguageCubit, LanguageState>(
-          builder: (context, languageState) {
-            return MaterialApp(
-              title: 'E-book Reader',
-              theme: ThemeData(
-                colorScheme: const ColorScheme(
-                  brightness: Brightness.light,
-                  primary: Colors.black,
-                  onPrimary: Colors.white,
-                  secondary: Colors.black87,
-                  onSecondary: Colors.white,
-                  error: Colors.red,
-                  onError: Colors.white,
-                  surface: Colors.white,
-                  onSurface: Colors.black,
-                ),
-                useMaterial3: true,
-                textTheme: GoogleFonts.lobsterTextTheme(
-                  Typography.englishLike2021,
+        return MaterialApp(
+          title: 'E-book Reader',
+          theme: ThemeData(
+            colorScheme: const ColorScheme(
+              brightness: Brightness.light,
+              primary: Colors.black,
+              onPrimary: Colors.white,
+              secondary: Colors.black87,
+              onSecondary: Colors.white,
+              error: Colors.red,
+              onError: Colors.white,
+              surface: Colors.white,
+              onSurface: Colors.black,
+            ),
+            useMaterial3: true,
+            textTheme: GoogleFonts.lobsterTextTheme(
+              Typography.englishLike2021,
+            )
+                .apply(
+                  displayColor: Colors.black,
+                  bodyColor: Colors.black,
                 )
-                    .apply(
-                      displayColor: Colors.black,
-                      bodyColor: Colors.black,
-                    )
-                    .copyWith(
-                      bodySmall: GoogleFonts.lobster(fontSize: 14),
-                      bodyMedium: GoogleFonts.lobster(fontSize: 16),
-                      bodyLarge: GoogleFonts.lobster(fontSize: 18),
-                    ),
-              ),
-              darkTheme: ThemeData(
-                colorScheme: const ColorScheme(
-                  brightness: Brightness.dark,
-                  primary: Colors.white,
-                  onPrimary: Colors.black,
-                  secondary: Colors.white70,
-                  onSecondary: Colors.black,
-                  error: Colors.red,
-                  onError: Colors.black,
-                  surface: Colors.black,
-                  onSurface: Colors.white,
+                .copyWith(
+                  bodySmall: GoogleFonts.lobster(fontSize: 14),
+                  bodyMedium: GoogleFonts.lobster(fontSize: 16),
+                  bodyLarge: GoogleFonts.lobster(fontSize: 18),
                 ),
-                useMaterial3: true,
-                textTheme: GoogleFonts.lobsterTextTheme(
-                  Typography.englishLike2021,
+          ),
+          darkTheme: ThemeData(
+            colorScheme: const ColorScheme(
+              brightness: Brightness.dark,
+              primary: Colors.white,
+              onPrimary: Colors.black,
+              secondary: Colors.white70,
+              onSecondary: Colors.black,
+              error: Colors.red,
+              onError: Colors.black,
+              surface: Colors.black,
+              onSurface: Colors.white,
+            ),
+            useMaterial3: true,
+            textTheme: GoogleFonts.lobsterTextTheme(
+              Typography.englishLike2021,
+            )
+                .apply(
+                  displayColor: Colors.white,
+                  bodyColor: Colors.white,
                 )
-                    .apply(
-                      displayColor: Colors.white,
-                      bodyColor: Colors.white,
-                    )
-                    .copyWith(
-                      bodySmall: GoogleFonts.lobster(fontSize: 14),
-                      bodyMedium: GoogleFonts.lobster(fontSize: 16),
-                      bodyLarge: GoogleFonts.lobster(fontSize: 18),
-                    ),
-              ),
-              themeMode: themeState.themeMode,
-              locale: languageState.locale,
-              localizationsDelegates: const [
-                AppLocalizations.delegate,
-                GlobalMaterialLocalizations.delegate,
-                GlobalWidgetsLocalizations.delegate,
-                GlobalCupertinoLocalizations.delegate,
-              ],
-              supportedLocales: const [
-                Locale('en'), // English
-                Locale('vi'), // Vietnamese
-              ],
-              home: const AuthGate(),
-              routes: {
-                '/forgot-password': (context) => BlocProvider(
-                      create: (_) => ForgetPasswordCubit(),
-                      child: ForgotPasswordScreen(
-                        toggleTheme: () =>
-                            context.read<ThemeCubit>().toggleTheme(),
-                      ),
-                    ),
-                '/sign-up': (context) => BlocProvider(
-                      create: (_) => SignupCubit(),
-                      child: SignUpScreen(
-                        toggleTheme: () =>
-                            context.read<ThemeCubit>().toggleTheme(),
-                      ),
-                    ),
-                '/sign-in': (context) => MultiBlocProvider(
-                      providers: [
-                        BlocProvider.value(value: context.read<UserCubit>()),
-                        BlocProvider(create: (_) => SigninCubit()),
-                      ],
-                      child: SignInScreen(
-                        toggleTheme: () =>
-                            context.read<ThemeCubit>().toggleTheme(),
-                      ),
-                    ),
-                '/main': (context) => const MainScreen(),
-                '/pdf_reader': (context) {
-                  final args = ModalRoute.of(context)!.settings.arguments
-                      as Map<String, dynamic>;
-                  final book = Book(
-                    id: args['bookId'] as String,
-                    title: args['bookTitle'] as String? ?? '',
-                    format: 'PDF',
-                    link: '',
-                    userId: FirebaseAuth.instance.currentUser?.uid ?? '',
-                    lastReadPage: (args['initialPage']?.toString() ?? '1'),
-                  );
-                  final cubit = BlocProvider.of<BookCubit>(context);
-                  return BlocProvider.value(
-                    value: cubit,
-                    child: PDFReaderScreen(
-                      book: book,
-                      initialPage: args['initialPage'] as int?,
-                    ),
-                  );
-                },
-                '/epub_reader': (context) {
-                  final args = ModalRoute.of(context)!.settings.arguments
-                      as Map<String, dynamic>;
-                  final book = Book(
-                    id: args['bookId'] as String,
-                    title: args['bookTitle'] as String? ?? '',
-                    format: 'EPUB',
-                    link: '',
-                    userId: FirebaseAuth.instance.currentUser?.uid ?? '',
-                    lastReadPage: '',
-                  );
-                  final cubit = BlocProvider.of<BookCubit>(context);
-                  return BlocProvider.value(
-                    value: cubit,
-                    child: EPUBReaderScreen(
-                      book: book,
-                      initialCfi: args['initialCfi'] as String?,
-                    ),
-                  );
-                },
-              },
-            );
+                .copyWith(
+                  bodySmall: GoogleFonts.lobster(fontSize: 14),
+                  bodyMedium: GoogleFonts.lobster(fontSize: 16),
+                  bodyLarge: GoogleFonts.lobster(fontSize: 18),
+                ),
+          ),
+          themeMode: themeState.themeMode,
+          localizationsDelegates: const [
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+          ],
+          supportedLocales: const [
+            Locale('en'), // English
+            Locale('vi'), // Vietnamese
+          ],
+          home: const AuthGate(),
+          routes: {
+            '/forgot-password': (context) => BlocProvider(
+                  create: (_) => ForgetPasswordCubit(),
+                  child: ForgotPasswordScreen(
+                    toggleTheme: () => context.read<ThemeCubit>().toggleTheme(),
+                  ),
+                ),
+            '/sign-up': (context) => BlocProvider(
+                  create: (_) => SignupCubit(),
+                  child: SignUpScreen(
+                    toggleTheme: () => context.read<ThemeCubit>().toggleTheme(),
+                  ),
+                ),
+            '/sign-in': (context) => MultiBlocProvider(
+                  providers: [
+                    BlocProvider.value(value: context.read<UserCubit>()),
+                    BlocProvider(create: (_) => SigninCubit()),
+                  ],
+                  child: SignInScreen(
+                    toggleTheme: () => context.read<ThemeCubit>().toggleTheme(),
+                  ),
+                ),
+            '/main': (context) => const MainScreen(),
+            '/pdf_reader': (context) {
+              final args = ModalRoute.of(context)!.settings.arguments
+                  as Map<String, dynamic>;
+              final book = Book(
+                id: args['bookId'] as String,
+                title: args['bookTitle'] as String? ?? '',
+                format: 'PDF',
+                link: '',
+                userId: FirebaseAuth.instance.currentUser?.uid ?? '',
+                lastReadPage: (args['initialPage']?.toString() ?? '1'),
+              );
+              final cubit = BlocProvider.of<BookCubit>(context);
+              return BlocProvider.value(
+                value: cubit,
+                child: PDFReaderScreen(
+                  book: book,
+                  initialPage: args['initialPage'] as int?,
+                ),
+              );
+            },
+            '/epub_reader': (context) {
+              final args = ModalRoute.of(context)!.settings.arguments
+                  as Map<String, dynamic>;
+              final book = Book(
+                id: args['bookId'] as String,
+                title: args['bookTitle'] as String? ?? '',
+                format: 'EPUB',
+                link: '',
+                userId: FirebaseAuth.instance.currentUser?.uid ?? '',
+                lastReadPage: '',
+              );
+              final cubit = BlocProvider.of<BookCubit>(context);
+              return BlocProvider.value(
+                value: cubit,
+                child: EPUBReaderScreen(
+                  book: book,
+                  initialCfi: args['initialCfi'] as String?,
+                ),
+              );
+            },
           },
         );
       },

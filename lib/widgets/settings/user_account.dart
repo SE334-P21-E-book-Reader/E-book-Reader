@@ -4,7 +4,6 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:flutter_gen/gen_l10n/app_localizations.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../../bloc/user/user_cubit.dart';
@@ -19,7 +18,6 @@ class UserAccount extends StatefulWidget {
 
 class _UserAccountState extends State<UserAccount> {
   final GlobalKey _avatarMenuKey = GlobalKey();
-
 
   void _showEditNameSheet(BuildContext context, String currentName) {
     final controller = TextEditingController(text: currentName);
@@ -40,14 +38,14 @@ class _UserAccountState extends State<UserAccount> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Text(AppLocalizations.of(context)!.accountInfo,
+              Text('Account Info',
                   style: Theme.of(context).textTheme.titleMedium),
               const SizedBox(height: 16),
               TextField(
                 controller: controller,
-                decoration: InputDecoration(
-                  labelText: AppLocalizations.of(context)!.username,
-                  border: const OutlineInputBorder(),
+                decoration: const InputDecoration(
+                  labelText: 'Username',
+                  border: OutlineInputBorder(),
                 ),
               ),
               const SizedBox(height: 16),
@@ -74,7 +72,7 @@ class _UserAccountState extends State<UserAccount> {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: Text(AppLocalizations.of(context)!.accountInfo),
+        title: const Text('Account Info'),
         content: const Text(
             'A password reset link will be sent to your email. Please check your inbox.'),
         actions: [
@@ -170,7 +168,6 @@ class _UserAccountState extends State<UserAccount> {
 
   @override
   Widget build(BuildContext context) {
-    final l10n = AppLocalizations.of(context)!;
     final theme = Theme.of(context);
     final userCubit = context.read<UserCubit>();
     String userId = userCubit.state.uid;
@@ -332,7 +329,7 @@ class _UserAccountState extends State<UserAccount> {
                           child: ListTile(
                             leading: Icon(Icons.logout,
                                 color: theme.colorScheme.error),
-                            title: Text(l10n.logout),
+                            title: const Text('Logout'),
                             onTap: () {
                               context.read<UserCubit>().logout();
                             },

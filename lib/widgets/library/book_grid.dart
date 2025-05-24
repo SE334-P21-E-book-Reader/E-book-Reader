@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_gen/gen_l10n/app_localizations.dart';
 
 import '../../models/book.dart';
 
@@ -22,7 +21,6 @@ class BookGrid extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final l10n = AppLocalizations.of(context)!;
     final colorScheme = Theme.of(context).colorScheme;
     final filteredBooks = books.where((book) {
       final query = searchQuery.toLowerCase();
@@ -34,7 +32,7 @@ class BookGrid extends StatelessWidget {
         child: Padding(
           padding: const EdgeInsets.symmetric(vertical: 32.0, horizontal: 16.0),
           child: Text(
-            l10n.noBooksFound,
+            'No books found',
             style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                   color: Theme.of(context).colorScheme.secondary,
                 ),

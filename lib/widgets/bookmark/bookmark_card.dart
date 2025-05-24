@@ -2,7 +2,6 @@ import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_epub_viewer/flutter_epub_viewer.dart';
-import 'package:flutter_gen/gen_l10n/app_localizations.dart';
 
 import '../../models/bookmark.dart';
 
@@ -25,12 +24,11 @@ class BookmarkCard extends StatelessWidget {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
     final textTheme = theme.textTheme;
-    final l10n = AppLocalizations.of(context)!;
     String displayText;
     // Try PDF bookmark (page number)
     final pageNum = int.tryParse(bookmark.location);
     if (pageNum != null) {
-      displayText = l10n.bookmarksPage(bookmark.location);
+      displayText = 'Page ${bookmark.location}';
     } else {
       // Try EPUB bookmark (JSON)
       EpubLocation? location;

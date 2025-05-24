@@ -4,7 +4,6 @@ import 'dart:io';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:flutter_gen/gen_l10n/app_localizations.dart';
 import 'package:http/http.dart' as http;
 import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -252,7 +251,6 @@ class _PDFReaderScreenBodyState extends State<_PDFReaderScreenBody>
   @override
   Widget build(BuildContext context) {
     super.build(context);
-    final l10n = AppLocalizations.of(context)!;
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
     final isPdf = widget.book.format.toUpperCase() == 'PDF';
@@ -274,7 +272,7 @@ class _PDFReaderScreenBodyState extends State<_PDFReaderScreenBody>
                 BlocBuilder<PdfReaderCubit, PdfReaderState>(
                   builder: (context, state) => IconButton(
                     icon: Icon(state.isSearching ? Icons.close : Icons.search),
-                    tooltip: l10n.search,
+                    tooltip: 'Search',
                     onPressed: () {
                       if (state.isSearching) {
                         _clearSearch();
@@ -305,7 +303,7 @@ class _PDFReaderScreenBodyState extends State<_PDFReaderScreenBody>
                           ? colorScheme.primary
                           : colorScheme.onSurface,
                     ),
-                    tooltip: l10n.bookmark,
+                    tooltip: 'Bookmark',
                     onPressed: () async {
                       final user = FirebaseAuth.instance.currentUser;
                       if (user == null) return;
@@ -511,14 +509,14 @@ class _PDFReaderScreenBodyState extends State<_PDFReaderScreenBody>
                     );
                   },
                   tooltip: theme.brightness == Brightness.dark
-                      ? l10n.theme
-                      : l10n.darkMode,
+                      ? 'Theme'
+                      : 'Dark Mode',
                 ),
                 const SizedBox(width: 4),
                 BlocBuilder<PdfReaderCubit, PdfReaderState>(
                   builder: (context, state) => IconButton(
                     icon: const Icon(Icons.menu_book),
-                    tooltip: l10n.contents,
+                    tooltip: 'Contents',
                     onPressed: () {
                       if (isPdf) {
                         _scaffoldKey.currentState?.openEndDrawer();
@@ -814,7 +812,7 @@ class _PDFReaderScreenBodyState extends State<_PDFReaderScreenBody>
                             child: TextField(
                               controller: _searchController,
                               decoration: InputDecoration(
-                                hintText: l10n.search,
+                                hintText: 'Search',
                                 border: const OutlineInputBorder(),
                                 isDense: true,
                                 suffixIcon: state.searchText.isNotEmpty

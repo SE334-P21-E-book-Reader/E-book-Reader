@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:flutter_gen/gen_l10n/app_localizations.dart';
 
 import '../../bloc/theme/theme_cubit.dart';
 import '../components/icon_switch.dart';
@@ -12,17 +11,15 @@ class ThemeSettings extends StatelessWidget {
   Widget build(BuildContext context) {
     final themeState = context.watch<ThemeCubit>().state;
     final isDarkMode = themeState.themeMode == ThemeMode.dark;
-    final l10n = AppLocalizations.of(context)!;
-
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        Text(l10n.darkMode),
+        Text('Dark Mode'),
         IconSwitch(
           items: [
             IconSwitchItem(
               icon: Icons.light_mode,
-              tooltip: l10n.theme,
+              tooltip: 'Theme',
               selected: !isDarkMode,
               onTap: () =>
                   context.read<ThemeCubit>().setThemeMode(ThemeMode.light),
@@ -30,7 +27,7 @@ class ThemeSettings extends StatelessWidget {
             ),
             IconSwitchItem(
               icon: Icons.dark_mode,
-              tooltip: l10n.darkMode,
+              tooltip: 'Dark Mode',
               selected: isDarkMode,
               onTap: () =>
                   context.read<ThemeCubit>().setThemeMode(ThemeMode.dark),
@@ -42,7 +39,6 @@ class ThemeSettings extends StatelessWidget {
     );
   }
 }
-
 
 class _ThemeModeButton extends StatelessWidget {
   final IconData icon;

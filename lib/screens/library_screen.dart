@@ -7,7 +7,6 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 // Will use BookCubit for book list
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:flutter_gen/gen_l10n/app_localizations.dart';
 
 import '../bloc/book/book_cubit.dart';
 import '../models/book.dart';
@@ -97,7 +96,6 @@ class _LibraryScreenState extends State<LibraryScreen>
 
   @override
   Widget build(BuildContext context) {
-    final l10n = AppLocalizations.of(context)!;
     final theme = Theme.of(context);
     void _handleBookMenu(Book book, [String? action]) =>
         _showBookMenu(context, book, action);
@@ -191,7 +189,7 @@ class _LibraryScreenState extends State<LibraryScreen>
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
                         Text(
-                          l10n.library,
+                          'Library',
                           style: theme.textTheme.titleLarge?.copyWith(
                             color: theme.colorScheme.onSurface,
                             fontWeight: FontWeight.bold,
@@ -199,7 +197,7 @@ class _LibraryScreenState extends State<LibraryScreen>
                         ),
                         IconButton(
                           icon: const Icon(Icons.add),
-                          tooltip: l10n.addBook,
+                          tooltip: 'Add Book',
                           onPressed: () async {
                             FilePickerResult? result =
                                 await FilePicker.platform.pickFiles(
@@ -268,7 +266,7 @@ class _LibraryScreenState extends State<LibraryScreen>
                       children: [
                         Expanded(
                           child: components.SearchBar(
-                            hintText: l10n.searchBooks,
+                            hintText: 'Search books...',
                             onChanged: (value) =>
                                 setState(() => _searchQuery = value),
                             borderColor: theme.dividerColor,
@@ -283,14 +281,14 @@ class _LibraryScreenState extends State<LibraryScreen>
                             items: [
                               IconSwitchItem(
                                 icon: Icons.grid_view,
-                                tooltip: l10n.gridView,
+                                tooltip: 'Grid View',
                                 selected: _viewMode == 'grid',
                                 onTap: () => setState(() => _viewMode = 'grid'),
                                 theme: theme,
                               ),
                               IconSwitchItem(
                                 icon: Icons.list,
-                                tooltip: l10n.listView,
+                                tooltip: 'List View',
                                 selected: _viewMode == 'list',
                                 onTap: () => setState(() => _viewMode = 'list'),
                                 theme: theme,
@@ -304,10 +302,10 @@ class _LibraryScreenState extends State<LibraryScreen>
                     const SizedBox(height: 8),
                     TabBar(
                       controller: _tabController,
-                      tabs: [
-                        Tab(text: l10n.all),
-                        Tab(text: l10n.epub),
-                        Tab(text: l10n.pdf),
+                      tabs: const [
+                        Tab(text: 'All'),
+                        Tab(text: 'EPUB'),
+                        Tab(text: 'PDF'),
                       ],
                     ),
                   ],
